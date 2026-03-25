@@ -1,8 +1,6 @@
 import Phaser from 'phaser';
 
-export interface GameController {
-  destroy(): void;
-}
+export interface GameController { destroy(): void; }
 
 const CELL_SIZE = 20;
 const COLS = 32;
@@ -10,74 +8,106 @@ const ROWS = 24;
 const CANVAS_W = COLS * CELL_SIZE;
 const CANVAS_H = ROWS * CELL_SIZE;
 const FOOD_COUNT = 3;
+const BASE_TICK_MS = 150;
+const SPEED_BOOST_TICK_MS = 80;
 
 type Direction = 'RIGHT' | 'LEFT' | 'UP' | 'DOWN';
 interface Point { x: number; y: number; }
 
-const OPPOSITE: Record<Direction, Direction> = {
-  RIGHT: 'LEFT', LEFT: 'RIGHT', UP: 'DOWN', DOWN: 'UP'
-};
+const OPPOSITE: Record<Direction, Direction> = { RIGHT: 'LEFT', LEFT: 'RIGHT', UP: 'DOWN', DOWN: 'UP' };
 const DELTA: Record<Direction, Point> = {
-  RIGHT: { x: 1, y: 0 }, LEFT: { x: -1, y: 0 },
-  UP: { x: 0, y: -1 }, DOWN: { x: 0, y: 1 }
+  RIGHT: { x: 1, y: 0 }, LEFT: { x: -1, y: 0 }, UP: { x: 0, y: -1 }, DOWN: { x: 0, y: 1 }
 };
 
-interface PlayerConfig {
+const LEFT_OF: Record<Direction, Direction> = { RIGHT: 'UP', UP: 'LEFT', LEFT: 'DOWN', DOWN: 'RIGHT' };
+const RIGHT_OF: Record<Direction, Direction> = { RIGHT: 'DOWN', DOWN: 'LEFT', LEFT: 'UP', UP: 'RIGHT' };
+
+type PowerUpKind = 'speed' | 'shield' | 'none';
+interface ActivePowerUp { kind: PowerUpKind; msRemaining: number; }
+
+type FoodKind = 'apple' | 'speed' | 'shield' | 'skull' | 'star';
+interface Food { x: number; y: number; kind: FoodKind; }
+
+interface SnakeState {
   id: number;
   name: string;
-  bodyColor: number;
-  headColor: number;
-  startX: number;
-  startY: number;
-  startDir: Direction;
-  scoreElId: string;
-}
-
-const PLAYERS: PlayerConfig[] = [
-  { id: 0, name: 'Player 1', bodyColor: 0xe74c3c, headColor: 0xff6b6b, startX: 6,  startY: 6,  startDir: 'RIGHT', scoreElId: 'p1-score' },
-  { id: 1, name: 'Player 2', bodyColor: 0x3498db, headColor: 0x74b9ff, startX: 25, startY: 6,  startDir: 'LEFT',  scoreElId: 'p2-score' },
-  { id: 2, name: 'Player 3', bodyColor: 0xf1c40f, headColor: 0xffeaa7, startX: 6,  startY: 17, startDir: 'RIGHT', scoreElId: 'p3-score' },
-  { id: 3, name: 'Player 4', bodyColor: 0x9b59b6, headColor: 0xc39bd3, startX: 25, startY: 17, startDir: 'LEFT',  scoreElId: 'p4-score' },
-];
-
-interface Snake {
-  config: PlayerConfig;
   body: Point[];
   direction: Direction;
   nextDirection: Direction;
   alive: boolean;
   score: number;
+  bodyColor: number;
+  headColor: number;
+  isHuman: boolean;
+  powerUp: ActivePowerUp;
+  stunnedMs: number;
+  scoreElId: string;
+}
+
+interface Challenge {
+  question: string;
+  choices: string[];
+  correct: number;
+}
+
+const CHALLENGES: Challenge[] = [
+  { question: 'What is 8 × 9?', choices: ['63', '72', '81', '64'], correct: 1 },
+  { question: 'Is 37 a prime number?', choices: ['Yes', 'No'], correct: 0 },
+  { question: 'Which has more sides: a hexagon or a pentagon?', choices: ['Hexagon', 'Pentagon', 'Same'], correct: 0 },
+  { question: 'What comes next: 2, 4, 8, 16, ___?', choices: ['24', '32', '30', '28'], correct: 1 },
+  { question: 'TRUE or FALSE: A square is always a rectangle.', choices: ['TRUE', 'FALSE'], correct: 0 },
+  { question: 'How many minutes in 2.5 hours?', choices: ['120', '135', '150', '160'], correct: 2 },
+  { question: 'What is the square root of 144?', choices: ['11', '12', '13', '14'], correct: 1 },
+  { question: 'TRUE or FALSE: All rectangles are squares.', choices: ['TRUE', 'FALSE'], correct: 1 },
+  { question: 'If a snake grows 1 cell per food, how long after eating 7 foods starting at length 3?', choices: ['7', '9', '10', '12'], correct: 2 },
+  { question: 'What is 15% of 200?', choices: ['25', '30', '35', '40'], correct: 1 },
+];
+
+function buildWalls(): Set<string> {
+  const w = new Set<string>();
+  for (let c = 1; c <= 12; c++) w.add(`${c},8`);
+  for (let c = 19; c <= 30; c++) w.add(`${c},8`);
+  for (let c = 1; c <= 12; c++) w.add(`${c},15`);
+  for (let c = 19; c <= 30; c++) w.add(`${c},15`);
+  return w;
+}
+const WALLS = buildWalls();
+
+const BRIDGE_ZONES = new Set<string>();
+for (let c = 13; c <= 18; c++) {
+  BRIDGE_ZONES.add(`${c},8`);
+  BRIDGE_ZONES.add(`${c},15`);
+}
+
+function pickFoodKind(): FoodKind {
+  const r = Math.random() * 100;
+  if (r < 50) return 'apple';
+  if (r < 70) return 'speed';
+  if (r < 85) return 'shield';
+  if (r < 95) return 'skull';
+  return 'star';
 }
 
 class SnakeScene extends Phaser.Scene {
-  private snakes: Snake[] = [];
-  private foods: Point[] = [];
-  private tickMs = 150;
+  private snakes: SnakeState[] = [];
+  private foods: Food[] = [];
+  private globalTickMs = BASE_TICK_MS;
   private elapsed = 0;
   private roundOver = false;
+  private challengeActive = false;
+  private solvedBridges = new Set<string>();
+  private activeChallenge: Challenge | null = null;
+  private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private overlayText!: Phaser.GameObjects.Text;
-
-  // P1 - Arrow keys
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  // P2 - WASD
   private keyW!: Phaser.Input.Keyboard.Key;
   private keyA!: Phaser.Input.Keyboard.Key;
   private keyS!: Phaser.Input.Keyboard.Key;
   private keyD!: Phaser.Input.Keyboard.Key;
-  // P3 - IJKL
-  private keyI!: Phaser.Input.Keyboard.Key;
-  private keyJ!: Phaser.Input.Keyboard.Key;
-  private keyK!: Phaser.Input.Keyboard.Key;
-  private keyL!: Phaser.Input.Keyboard.Key;
-  // P4 - TFGH
-  private keyT!: Phaser.Input.Keyboard.Key;
-  private keyF!: Phaser.Input.Keyboard.Key;
-  private keyG!: Phaser.Input.Keyboard.Key;
-  private keyH!: Phaser.Input.Keyboard.Key;
-  // Space
   private spaceKey!: Phaser.Input.Keyboard.Key;
+  private domListeners: Array<{ el: Element; event: string; fn: EventListener }> = [];
 
   constructor() {
     super({ key: 'SnakeScene' });
@@ -87,7 +117,7 @@ class SnakeScene extends Phaser.Scene {
     this.graphics = this.add.graphics();
     this.overlayGraphics = this.add.graphics();
     this.overlayText = this.add.text(CANVAS_W / 2, CANVAS_H / 2, '', {
-      fontSize: '32px',
+      fontSize: '28px',
       color: '#ffffff',
       align: 'center',
       fontFamily: 'system-ui, sans-serif',
@@ -100,54 +130,97 @@ class SnakeScene extends Phaser.Scene {
     this.keyA = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A);
     this.keyS = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    this.keyI = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.I);
-    this.keyJ = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.J);
-    this.keyK = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.K);
-    this.keyL = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.L);
-    this.keyT = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.T);
-    this.keyF = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.F);
-    this.keyG = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.G);
-    this.keyH = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.H);
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
     this.resetGame();
   }
 
   private resetGame(): void {
-    this.snakes = PLAYERS.map((cfg) => {
-      const dx = cfg.startDir === 'RIGHT' ? -1 : 1;
-      return {
-        config: cfg,
-        body: [
-          { x: cfg.startX, y: cfg.startY },
-          { x: cfg.startX + dx, y: cfg.startY },
-          { x: cfg.startX + 2 * dx, y: cfg.startY },
-        ],
-        direction: cfg.startDir,
-        nextDirection: cfg.startDir,
-        alive: true,
-        score: 0,
-      };
-    });
+    // Clear old DOM listeners from previous round
+    for (const { el, event, fn } of this.domListeners) {
+      el.removeEventListener(event, fn);
+    }
+    this.domListeners = [];
+
+    this.snakes = [
+      {
+        id: 0, name: 'You',
+        body: [{ x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }],
+        direction: 'RIGHT', nextDirection: 'RIGHT',
+        alive: true, score: 0,
+        bodyColor: 0xe74c3c, headColor: 0xff6b6b,
+        isHuman: true,
+        powerUp: { kind: 'none', msRemaining: 0 },
+        stunnedMs: 0,
+        scoreElId: 'p1-score',
+      },
+      {
+        id: 1, name: 'AI Blue',
+        body: [{ x: 25, y: 6 }, { x: 26, y: 6 }, { x: 27, y: 6 }],
+        direction: 'LEFT', nextDirection: 'LEFT',
+        alive: true, score: 0,
+        bodyColor: 0x3498db, headColor: 0x74b9ff,
+        isHuman: false,
+        powerUp: { kind: 'none', msRemaining: 0 },
+        stunnedMs: 0,
+        scoreElId: 'p2-score',
+      },
+      {
+        id: 2, name: 'AI Green',
+        body: [{ x: 6, y: 17 }, { x: 5, y: 17 }, { x: 4, y: 17 }],
+        direction: 'RIGHT', nextDirection: 'RIGHT',
+        alive: true, score: 0,
+        bodyColor: 0x00b894, headColor: 0x55efc4,
+        isHuman: false,
+        powerUp: { kind: 'none', msRemaining: 0 },
+        stunnedMs: 0,
+        scoreElId: 'p3-score',
+      },
+      {
+        id: 3, name: 'AI Orange',
+        body: [{ x: 25, y: 17 }, { x: 26, y: 17 }, { x: 27, y: 17 }],
+        direction: 'LEFT', nextDirection: 'LEFT',
+        alive: true, score: 0,
+        bodyColor: 0xe17055, headColor: 0xfab1a0,
+        isHuman: false,
+        powerUp: { kind: 'none', msRemaining: 0 },
+        stunnedMs: 0,
+        scoreElId: 'p4-score',
+      },
+    ];
+
     this.foods = [];
-    this.tickMs = 150;
+    this.globalTickMs = BASE_TICK_MS;
     this.elapsed = 0;
     this.roundOver = false;
+    this.challengeActive = false;
+    this.solvedBridges = new Set<string>();
+
+    if (this.challengeTimeoutId !== null) {
+      clearTimeout(this.challengeTimeoutId);
+      this.challengeTimeoutId = null;
+    }
+    this.activeChallenge = null;
+
+    const overlay = document.getElementById('challenge-overlay');
+    if (overlay) overlay.classList.add('hidden');
+
     this.overlayText.setText('');
     this.overlayGraphics.clear();
+
     for (let i = 0; i < FOOD_COUNT; i++) {
       this.spawnFood();
     }
+
     this.updateScoreDisplays();
+    this.updatePowerUpHUD();
   }
 
   private allBodyCells(): Set<string> {
     const cells = new Set<string>();
     for (const snake of this.snakes) {
       if (snake.alive) {
-        for (const p of snake.body) {
-          cells.add(`${p.x},${p.y}`);
-        }
+        for (const p of snake.body) cells.add(`${p.x},${p.y}`);
       }
     }
     return cells;
@@ -155,9 +228,9 @@ class SnakeScene extends Phaser.Scene {
 
   private spawnFood(): void {
     const occupied = this.allBodyCells();
-    for (const f of this.foods) {
-      occupied.add(`${f.x},${f.y}`);
-    }
+    for (const f of this.foods) occupied.add(`${f.x},${f.y}`);
+    for (const w of WALLS) occupied.add(w);
+
     let fx = 0;
     let fy = 0;
     let attempts = 0;
@@ -166,179 +239,413 @@ class SnakeScene extends Phaser.Scene {
       fy = Phaser.Math.Between(0, ROWS - 1);
       attempts++;
     } while (occupied.has(`${fx},${fy}`) && attempts < 1000);
-    this.foods.push({ x: fx, y: fy });
+
+    this.foods.push({ x: fx, y: fy, kind: pickFoodKind() });
   }
 
-  private queueDirection(snake: Snake, dir: Direction): void {
-    if (dir !== OPPOSITE[snake.direction]) {
+  private queueDirection(snake: SnakeState, dir: Direction): void {
+    if (dir !== OPPOSITE[snake.direction] && snake.stunnedMs <= 0) {
       snake.nextDirection = dir;
     }
   }
 
-  private tick(): void {
-    const alive = this.snakes.filter((s) => s.alive);
-
-    // Step 1: Commit directions
-    for (const snake of alive) {
-      snake.direction = snake.nextDirection;
+  private aiChooseDirection(snake: SnakeState): Direction {
+    const occupied = new Set<string>(WALLS);
+    for (const s of this.snakes) {
+      if (s.alive) {
+        for (const p of s.body) occupied.add(`${p.x},${p.y}`);
+      }
     }
 
-    // Step 2: Compute new heads
+    const head = snake.body[0];
+    const candidates: Direction[] = [
+      snake.direction,
+      LEFT_OF[snake.direction],
+      RIGHT_OF[snake.direction],
+    ];
+
+    const nearestFoodDist = (nx: number, ny: number): number => {
+      let best = Infinity;
+      for (const f of this.foods) {
+        const d = Math.abs(f.x - nx) + Math.abs(f.y - ny);
+        if (d < best) best = d;
+      }
+      return best;
+    };
+
+    let bestDir = snake.direction;
+    let bestScore = Infinity;
+    let foundValid = false;
+
+    for (const dir of candidates) {
+      const d = DELTA[dir];
+      const nx = head.x + d.x;
+      const ny = head.y + d.y;
+      if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) continue;
+      if (occupied.has(`${nx},${ny}`)) continue;
+      const score = nearestFoodDist(nx, ny);
+      if (!foundValid || score < bestScore) {
+        bestScore = score;
+        bestDir = dir;
+        foundValid = true;
+      }
+    }
+
+    return bestDir;
+  }
+
+  private tick(): void {
+    // AI direction selection
+    for (const snake of this.snakes) {
+      if (!snake.alive || snake.isHuman) continue;
+      snake.nextDirection = this.aiChooseDirection(snake);
+    }
+
+    const alive = this.snakes.filter((s) => s.alive);
+
+    // Commit directions (skip if stunned)
+    for (const snake of alive) {
+      if (snake.stunnedMs <= 0) {
+        snake.direction = snake.nextDirection;
+      }
+    }
+
+    // Compute new heads
     const newHeads = new Map<number, Point>();
     for (const snake of alive) {
       const head = snake.body[0];
       const d = DELTA[snake.direction];
-      newHeads.set(snake.config.id, { x: head.x + d.x, y: head.y + d.y });
+      newHeads.set(snake.id, { x: head.x + d.x, y: head.y + d.y });
     }
 
-    // Step 3: Wall collision
+    // Border and wall collisions
     for (const snake of alive) {
-      const nh = newHeads.get(snake.config.id)!;
-      if (nh.x < 0 || nh.x >= COLS || nh.y < 0 || nh.y >= ROWS) {
+      const nh = newHeads.get(snake.id)!;
+      if (
+        nh.x < 0 || nh.x >= COLS || nh.y < 0 || nh.y >= ROWS ||
+        WALLS.has(`${nh.x},${nh.y}`)
+      ) {
         snake.alive = false;
       }
     }
 
     const stillAlive = alive.filter((s) => s.alive);
 
-    // Step 4: Determine which snakes eat food
+    // Determine which snakes eat food
     const foodSet = new Set<string>(this.foods.map((f) => `${f.x},${f.y}`));
     const eatingSnakes = new Set<number>();
     for (const snake of stillAlive) {
-      const nh = newHeads.get(snake.config.id)!;
-      if (foodSet.has(`${nh.x},${nh.y}`)) {
-        eatingSnakes.add(snake.config.id);
-      }
+      const nh = newHeads.get(snake.id)!;
+      if (foodSet.has(`${nh.x},${nh.y}`)) eatingSnakes.add(snake.id);
     }
 
-    // Step 5: Remove tails for non-eating snakes
+    // Remove tails for non-eating snakes
     for (const snake of stillAlive) {
-      if (!eatingSnakes.has(snake.config.id)) {
-        snake.body.pop();
-      }
+      if (!eatingSnakes.has(snake.id)) snake.body.pop();
     }
 
-    // Step 6: Build occupied cell set (bodies after tail removal)
+    // Build occupied cell set (after tail removal)
     const occupied = new Set<string>();
     for (const snake of stillAlive) {
-      for (const p of snake.body) {
-        occupied.add(`${p.x},${p.y}`);
-      }
+      for (const p of snake.body) occupied.add(`${p.x},${p.y}`);
     }
 
-    // Step 7: Detect body collisions and head-head collisions
-    const headCellToSnakes = new Map<string, Snake[]>();
+    // Track where each new head is going (for head-head detection)
+    const headCellToSnakes = new Map<string, SnakeState[]>();
     for (const snake of stillAlive) {
-      const nh = newHeads.get(snake.config.id)!;
+      const nh = newHeads.get(snake.id)!;
       const key = `${nh.x},${nh.y}`;
       if (!headCellToSnakes.has(key)) headCellToSnakes.set(key, []);
       headCellToSnakes.get(key)!.push(snake);
     }
 
     const toKill = new Set<number>();
+
+    // Body collisions
     for (const snake of stillAlive) {
-      const nh = newHeads.get(snake.config.id)!;
-      if (occupied.has(`${nh.x},${nh.y}`)) {
-        toKill.add(snake.config.id);
+      const nh = newHeads.get(snake.id)!;
+      const nhKey = `${nh.x},${nh.y}`;
+      if (occupied.has(nhKey)) {
+        if (snake.isHuman && snake.powerUp.kind === 'shield') {
+          // Shield only absorbs hits against other snakes' bodies (not own body)
+          const isOwnBody = snake.body.some((p) => `${p.x},${p.y}` === nhKey);
+          if (!isOwnBody) {
+            // Absorb the hit; shield expires
+            snake.powerUp = { kind: 'none', msRemaining: 0 };
+          } else {
+            toKill.add(snake.id);
+          }
+        } else {
+          toKill.add(snake.id);
+        }
       }
     }
+
+    // Head-head collisions (shield cannot block these)
     for (const [, snakesAtCell] of headCellToSnakes) {
       if (snakesAtCell.length > 1) {
-        for (const s of snakesAtCell) toKill.add(s.config.id);
+        for (const s of snakesAtCell) toKill.add(s.id);
       }
     }
+
     for (const id of toKill) {
       this.snakes[id].alive = false;
     }
 
-    // Step 8: Prepend new heads for survivors; handle food eating
+    // Prepend new heads for survivors; process food effects
     const survivors = stillAlive.filter((s) => s.alive);
+    const foodsEaten: string[] = [];
+
     for (const snake of survivors) {
-      const nh = newHeads.get(snake.config.id)!;
+      const nh = newHeads.get(snake.id)!;
       snake.body.unshift(nh);
-      if (eatingSnakes.has(snake.config.id)) {
-        snake.score += 10;
+
+      if (eatingSnakes.has(snake.id)) {
         const foodKey = `${nh.x},${nh.y}`;
-        this.foods = this.foods.filter((f) => `${f.x},${f.y}` !== foodKey);
-        this.spawnFood();
-        this.tickMs = Math.max(80, this.tickMs - 3);
+        const food = this.foods.find((f) => `${f.x},${f.y}` === foodKey);
+        if (food) {
+          foodsEaten.push(foodKey);
+          switch (food.kind) {
+            case 'apple':
+              snake.score += 10;
+              // tail preserved = natural growth ✓
+              break;
+            case 'speed':
+              snake.score += 10;
+              if (snake.isHuman) snake.powerUp = { kind: 'speed', msRemaining: 5000 };
+              // tail preserved = grow ✓
+              break;
+            case 'shield':
+              snake.score += 10;
+              if (snake.isHuman) snake.powerUp = { kind: 'shield', msRemaining: 5000 };
+              // tail preserved = grow ✓
+              break;
+            case 'skull':
+              // Shrink by 3 (min length 1); tail was preserved so remove 3 from back
+              for (let i = 0; i < 3; i++) {
+                if (snake.body.length > 1) snake.body.pop();
+              }
+              break;
+            case 'star':
+              snake.score += 50;
+              // No grow: tail was preserved by eating logic, so pop it back off
+              if (snake.body.length > 1) snake.body.pop();
+              break;
+          }
+        }
       }
     }
 
+    // Remove eaten foods and respawn
+    this.foods = this.foods.filter((f) => !foodsEaten.includes(`${f.x},${f.y}`));
+    while (this.foods.length < FOOD_COUNT) {
+      this.spawnFood();
+    }
+
+    // Accelerate global tick slightly per food eaten
+    if (foodsEaten.length > 0) {
+      this.globalTickMs = Math.max(80, this.globalTickMs - 2 * foodsEaten.length);
+    }
+
     this.updateScoreDisplays();
+    this.updatePowerUpHUD();
     this.checkWinCondition();
   }
 
   private checkWinCondition(): void {
-    const alive = this.snakes.filter((s) => s.alive);
-    if (alive.length <= 1) {
-      this.endRound(alive.length === 1 ? alive[0] : null);
+    if (this.roundOver) return;
+    const human = this.snakes[0];
+    const aiAlive = this.snakes.filter((s) => !s.isHuman && s.alive);
+
+    if (aiAlive.length === 0 && human.alive) {
+      this.endRound('win', human.score);
+    } else if (!human.alive && aiAlive.length > 0) {
+      this.endRound('lose', human.score);
+    } else if (!human.alive && aiAlive.length === 0) {
+      this.endRound('draw', 0);
     }
   }
 
-  private endRound(winner: Snake | null): void {
+  private endRound(result: 'win' | 'lose' | 'draw', score: number): void {
     this.roundOver = true;
     this.overlayGraphics.fillStyle(0x000000, 0.65);
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    const msg = winner
-      ? `${winner.config.name} Wins! 🏆\n\nPress SPACE to play again`
-      : 'Draw! 🤝\n\nPress SPACE to play again';
+    let msg: string;
+    if (result === 'win') {
+      msg = `You Win! 🏆\nScore: ${score}\n\nSPACE to play again`;
+    } else if (result === 'lose') {
+      msg = `Game Over 💀\nScore: ${score}\n\nSPACE to play again`;
+    } else {
+      msg = 'Draw! 🤝\n\nSPACE to play again';
+    }
     this.overlayText.setText(msg);
   }
 
   private updateScoreDisplays(): void {
     for (const snake of this.snakes) {
-      const el = document.getElementById(snake.config.scoreElId);
+      const el = document.getElementById(snake.scoreElId);
       if (el) el.textContent = String(snake.score);
     }
   }
 
-  update(_time: number, delta: number): void {
-    if (!this.roundOver) {
-      const p1 = this.snakes[0];
-      if (p1.alive) {
-        if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) this.queueDirection(p1, 'RIGHT');
-        else if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) this.queueDirection(p1, 'LEFT');
-        else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) this.queueDirection(p1, 'UP');
-        else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) this.queueDirection(p1, 'DOWN');
-      }
-      const p2 = this.snakes[1];
-      if (p2.alive) {
-        if (Phaser.Input.Keyboard.JustDown(this.keyD)) this.queueDirection(p2, 'RIGHT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyA)) this.queueDirection(p2, 'LEFT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyW)) this.queueDirection(p2, 'UP');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyS)) this.queueDirection(p2, 'DOWN');
-      }
-      const p3 = this.snakes[2];
-      if (p3.alive) {
-        if (Phaser.Input.Keyboard.JustDown(this.keyL)) this.queueDirection(p3, 'RIGHT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyJ)) this.queueDirection(p3, 'LEFT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyI)) this.queueDirection(p3, 'UP');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyK)) this.queueDirection(p3, 'DOWN');
-      }
-      const p4 = this.snakes[3];
-      if (p4.alive) {
-        if (Phaser.Input.Keyboard.JustDown(this.keyH)) this.queueDirection(p4, 'RIGHT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyF)) this.queueDirection(p4, 'LEFT');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyT)) this.queueDirection(p4, 'UP');
-        else if (Phaser.Input.Keyboard.JustDown(this.keyG)) this.queueDirection(p4, 'DOWN');
-      }
+  private updatePowerUpHUD(): void {
+    const human = this.snakes[0];
+    if (!human) return;
+    const display = document.getElementById('powerup-display');
+    const timer = document.getElementById('powerup-timer');
+    if (!display || !timer) return;
+
+    if (human.stunnedMs > 0) {
+      display.textContent = '😵 Stunned';
+      display.style.color = '#95a5a6';
+      timer.textContent = `${Math.ceil(human.stunnedMs / 1000)}s`;
+      return;
+    }
+
+    const pu = human.powerUp;
+    if (pu.kind === 'speed') {
+      display.textContent = '⚡ Speed Boost';
+      display.style.color = '#f1c40f';
+      timer.textContent = `${Math.ceil(pu.msRemaining / 1000)}s`;
+    } else if (pu.kind === 'shield') {
+      display.textContent = '🛡 Shield';
+      display.style.color = '#00cec9';
+      timer.textContent = `${Math.ceil(pu.msRemaining / 1000)}s`;
     } else {
-      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
-        this.resetGame();
+      display.textContent = 'None';
+      display.style.color = '';
+      timer.textContent = '';
+    }
+  }
+
+  private triggerChallenge(cellKey: string): void {
+    this.challengeActive = true;
+    this.solvedBridges.add(cellKey);
+    this.activeChallenge = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
+
+    const questionEl = document.getElementById('challenge-question');
+    const choicesEl = document.getElementById('challenge-choices');
+    const overlay = document.getElementById('challenge-overlay');
+
+    if (questionEl) questionEl.textContent = this.activeChallenge.question;
+
+    if (choicesEl) {
+      choicesEl.innerHTML = '';
+
+      // Reset timer bar animation
+      const timerBar = document.getElementById('challenge-timer-bar');
+      if (timerBar) {
+        timerBar.style.animation = 'none';
+        void timerBar.offsetWidth; // force reflow to restart animation
+        timerBar.style.animation = '';
+      }
+
+      const challenge = this.activeChallenge;
+      challenge.choices.forEach((choice, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = choice;
+        const fn: EventListener = () => {
+          if (!this.challengeActive) return;
+          this.resolveChallenge(idx === challenge.correct);
+        };
+        btn.addEventListener('click', fn);
+        this.domListeners.push({ el: btn, event: 'click', fn });
+        choicesEl.appendChild(btn);
+      });
+    }
+
+    if (overlay) overlay.classList.remove('hidden');
+
+    this.challengeTimeoutId = setTimeout(() => {
+      if (this.challengeActive) this.resolveChallenge(false);
+    }, 6000);
+  }
+
+  private resolveChallenge(correct: boolean): void {
+    if (!this.challengeActive) return;
+    if (this.challengeTimeoutId !== null) {
+      clearTimeout(this.challengeTimeoutId);
+      this.challengeTimeoutId = null;
+    }
+    this.activeChallenge = null;
+
+    const human = this.snakes[0];
+    if (correct) {
+      human.score += 30;
+      human.powerUp = { kind: 'shield', msRemaining: 4000 };
+    } else {
+      human.stunnedMs = 3000;
+    }
+
+    const overlay = document.getElementById('challenge-overlay');
+    if (overlay) overlay.classList.add('hidden');
+
+    this.challengeActive = false;
+    this.updateScoreDisplays();
+    this.updatePowerUpHUD();
+  }
+
+  update(_time: number, delta: number): void {
+    // Decrement power-up and stun timers for all snakes
+    for (const snake of this.snakes) {
+      if (snake.powerUp.msRemaining > 0) {
+        snake.powerUp.msRemaining = Math.max(0, snake.powerUp.msRemaining - delta);
+        if (snake.powerUp.msRemaining === 0) snake.powerUp.kind = 'none';
+      }
+      if (snake.stunnedMs > 0) {
+        snake.stunnedMs = Math.max(0, snake.stunnedMs - delta);
       }
     }
 
-    if (!this.roundOver) {
-      this.elapsed += delta;
-      while (this.elapsed >= this.tickMs) {
-        this.elapsed -= this.tickMs;
-        this.tick();
-        if (this.roundOver) break;
+    if (this.roundOver) {
+      if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.resetGame();
+      this.draw();
+      return;
+    }
+
+    if (this.challengeActive) {
+      this.draw();
+      return;
+    }
+
+    // Handle human keyboard input (arrows + WASD)
+    const human = this.snakes[0];
+    if (human.alive) {
+      if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.keyD)) {
+        this.queueDirection(human, 'RIGHT');
+      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.keyA)) {
+        this.queueDirection(human, 'LEFT');
+      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.keyW)) {
+        this.queueDirection(human, 'UP');
+      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.keyS)) {
+        this.queueDirection(human, 'DOWN');
+      }
+    }
+
+    // Use speed boost tick rate if active
+    const tickMs = (human.alive && human.powerUp.kind === 'speed')
+      ? SPEED_BOOST_TICK_MS
+      : this.globalTickMs;
+
+    this.elapsed += delta;
+    while (this.elapsed >= tickMs) {
+      this.elapsed -= tickMs;
+      this.tick();
+      if (this.roundOver || this.challengeActive) break;
+
+      // Check bridge zone after tick
+      if (human.alive && human.body.length > 0) {
+        const head = human.body[0];
+        const key = `${head.x},${head.y}`;
+        if (BRIDGE_ZONES.has(key) && !this.solvedBridges.has(key)) {
+          this.triggerChallenge(key);
+          break;
+        }
       }
     }
 
     this.draw();
+    this.updatePowerUpHUD();
   }
 
   private draw(): void {
@@ -364,30 +671,101 @@ class SnakeScene extends Phaser.Scene {
       g.strokePath();
     }
 
-    // Food
-    g.fillStyle(0xff4500);
-    for (const food of this.foods) {
-      g.fillCircle(
-        food.x * CELL_SIZE + CELL_SIZE / 2,
-        food.y * CELL_SIZE + CELL_SIZE / 2,
-        CELL_SIZE / 2 - 2
-      );
+    // Bridge zone highlights (lighter background)
+    g.fillStyle(0x1e3a1e);
+    for (let c = 13; c <= 18; c++) {
+      g.fillRect(c * CELL_SIZE, 8 * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      g.fillRect(c * CELL_SIZE, 15 * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     }
 
-    // Draw alive snakes
+    // Walls
+    for (const key of WALLS) {
+      const parts = key.split(',');
+      const wx = Number(parts[0]);
+      const wy = Number(parts[1]);
+      g.fillStyle(0x2d3436);
+      g.fillRect(wx * CELL_SIZE + 1, wy * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+      g.lineStyle(2, 0x636e72, 1);
+      g.strokeRect(wx * CELL_SIZE + 1, wy * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+    }
+
+    // Food
+    for (const food of this.foods) {
+      const cx = food.x * CELL_SIZE + CELL_SIZE / 2;
+      const cy = food.y * CELL_SIZE + CELL_SIZE / 2;
+      const r = CELL_SIZE / 2 - 2;
+      switch (food.kind) {
+        case 'apple':
+          g.fillStyle(0xe74c3c);
+          g.fillCircle(cx, cy, r);
+          break;
+        case 'speed':
+          g.fillStyle(0xf1c40f);
+          g.fillTriangle(cx, cy - r, cx + r, cy, cx, cy + r);
+          g.fillTriangle(cx, cy - r, cx - r, cy, cx, cy + r);
+          break;
+        case 'shield':
+          g.fillStyle(0x00cec9);
+          g.fillRect(food.x * CELL_SIZE + 2, food.y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+          g.fillStyle(0x0d1a0d);
+          g.fillRect(food.x * CELL_SIZE + 6, food.y * CELL_SIZE + 6, CELL_SIZE - 12, CELL_SIZE - 12);
+          break;
+        case 'skull':
+          g.fillStyle(0x6c5ce7);
+          g.fillTriangle(cx, cy - r, cx + r, cy, cx, cy + r);
+          g.fillTriangle(cx, cy - r, cx - r, cy, cx, cy + r);
+          break;
+        case 'star':
+          g.fillStyle(0xfdcb6e);
+          g.fillCircle(cx, cy, r + 1);
+          break;
+      }
+    }
+
+    // Snakes
     for (const snake of this.snakes) {
       if (!snake.alive) continue;
-      g.fillStyle(snake.config.bodyColor);
+
+      // Body segments
+      g.fillStyle(snake.bodyColor);
       for (let i = 1; i < snake.body.length; i++) {
         const seg = snake.body[i];
         g.fillRect(seg.x * CELL_SIZE + 1, seg.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
       }
+
+      // Head
       if (snake.body.length > 0) {
-        g.fillStyle(snake.config.headColor);
         const h = snake.body[0];
-        g.fillRect(h.x * CELL_SIZE + 1, h.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+        const hpx = h.x * CELL_SIZE;
+        const hpy = h.y * CELL_SIZE;
+
+        if (snake.isHuman && snake.stunnedMs > 0) {
+          g.fillStyle(0x95a5a6);
+        } else {
+          g.fillStyle(snake.headColor);
+        }
+        g.fillRect(hpx + 1, hpy + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+
+        // Shield ring around head
+        if (snake.isHuman && snake.powerUp.kind === 'shield') {
+          g.lineStyle(2, 0x00cec9, 1);
+          g.strokeCircle(hpx + CELL_SIZE / 2, hpy + CELL_SIZE / 2, CELL_SIZE / 2 + 3);
+        }
       }
     }
+  }
+
+  shutdown(): void {
+    for (const { el, event, fn } of this.domListeners) {
+      el.removeEventListener(event, fn);
+    }
+    this.domListeners = [];
+    if (this.challengeTimeoutId !== null) {
+      clearTimeout(this.challengeTimeoutId);
+      this.challengeTimeoutId = null;
+    }
+    const overlay = document.getElementById('challenge-overlay');
+    if (overlay) overlay.classList.add('hidden');
   }
 }
 
@@ -401,13 +779,13 @@ export function createGame(): GameController {
     scene: SnakeScene,
     scale: {
       mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH
-    }
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
   });
 
   return {
     destroy(): void {
       game.destroy(true);
-    }
+    },
   };
 }

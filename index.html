@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>4 Snake Royale</title>
+  <title>Snake Arena: Logic Survival</title>
 </head>
 <body>
   <div id="app">
 
     <!-- ── Start screen ─────────────────────────────────────── -->
     <div id="start-screen">
-      <h1 id="start-title">4 Snake Royale</h1>
-      <p id="start-blurb">Four snakes, one arena. Control your snake, eat food, outlast your rivals. Last snake standing wins! 🏆</p>
+      <h1 id="start-title">Snake Arena: Logic Survival</h1>
+      <p id="start-blurb">Navigate the arena, eat power foods, solve bridge logic challenges, and outlast 3 AI snakes. Strategy + survival = victory! 🧠🐍</p>
       <button id="start-button" class="primary-button">Start Game</button>
       <div id="start-about-button-wrap">
         <button id="start-about-button" class="secondary-button">About</button>
@@ -23,7 +23,7 @@
     <div id="game-shell" class="hidden">
 
       <div class="topbar">
-        <h1 id="title-text">4 Snake Royale</h1>
+        <h1 id="title-text">Snake Arena: Logic Survival</h1>
         <button id="about-button" class="secondary-button">About</button>
         <span id="version-label">Version:</span>
         <span id="version-value"></span>
@@ -33,49 +33,71 @@
 
       <div class="panel">
 
+        <!-- Power-up HUD -->
+        <div class="powerup-card">
+          <h2>Power-Up</h2>
+          <div id="powerup-display" class="powerup-display">None</div>
+          <div id="powerup-timer" class="powerup-timer"></div>
+        </div>
+
+        <!-- Scores -->
         <div class="players-card">
           <h2>Scores</h2>
-          <div class="player-score p1-color">
-            <span class="player-label">Player 1</span>
-            <span class="player-keys">Arrow Keys</span>
+          <div class="player-score human-color">
+            <span class="player-label">🎮 You</span>
+            <span class="player-keys">↑ ↓ ← → / WASD</span>
             <strong id="p1-score">0</strong>
           </div>
-          <div class="player-score p2-color">
-            <span class="player-label">Player 2</span>
-            <span class="player-keys">WASD</span>
+          <div class="player-score ai1-color">
+            <span class="player-label">🤖 AI Blue</span>
             <strong id="p2-score">0</strong>
           </div>
-          <div class="player-score p3-color">
-            <span class="player-label">Player 3</span>
-            <span class="player-keys">IJKL</span>
+          <div class="player-score ai2-color">
+            <span class="player-label">🤖 AI Green</span>
             <strong id="p3-score">0</strong>
           </div>
-          <div class="player-score p4-color">
-            <span class="player-label">Player 4</span>
-            <span class="player-keys">TFGH</span>
+          <div class="player-score ai3-color">
+            <span class="player-label">🤖 AI Orange</span>
             <strong id="p4-score">0</strong>
           </div>
         </div>
 
-        <div class="controls-card">
-          <h2>Controls</h2>
-          <div class="controls-list">
-            <div class="control-row p1-color"><span class="ctrl-name">P1</span><kbd>← ↑ → ↓</kbd></div>
-            <div class="control-row p2-color"><span class="ctrl-name">P2</span><kbd>W A S D</kbd></div>
-            <div class="control-row p3-color"><span class="ctrl-name">P3</span><kbd>I J K L</kbd></div>
-            <div class="control-row p4-color"><span class="ctrl-name">P4</span><kbd>T F G H</kbd></div>
-          </div>
+        <!-- Food legend -->
+        <div class="food-legend-card">
+          <h2>Foods</h2>
+          <div class="food-item"><span class="food-dot apple-dot">●</span><span>Apple — grow +1, +10pts</span></div>
+          <div class="food-item"><span class="food-dot speed-dot">⚡</span><span>Speed — 5s boost</span></div>
+          <div class="food-item"><span class="food-dot shield-dot">🛡</span><span>Shield — absorb 1 hit</span></div>
+          <div class="food-item"><span class="food-dot skull-dot">💀</span><span>Skull — shrink 3!</span></div>
+          <div class="food-item"><span class="food-dot star-dot">⭐</span><span>Star — +50pts</span></div>
         </div>
 
+        <!-- Instructions -->
         <div class="instructions-card">
           <h2>How to Play</h2>
-          <p>All 4 snakes move simultaneously on the same arena.</p>
-          <p>Eat food to grow longer and earn 10 points.</p>
-          <p>Die if you hit a wall, yourself, or another snake.</p>
-          <p>The last snake alive wins the round!</p>
-          <p>Press <kbd>Space</kbd> to restart after game over.</p>
+          <p>Navigate through bridges to trigger logic challenges. Answer correctly for shield + 30 pts! Answer wrong and get stunned for 3s.</p>
+          <p>Eat power foods, outlast 3 AI snakes, survive!</p>
+          <p><kbd>Space</kbd> to restart after game over.</p>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── Logic challenge overlay ──────────────────────────── -->
+    <div id="challenge-overlay" class="hidden challenge-overlay">
+      <div class="challenge-card">
+        <div class="challenge-header">
+          <span class="challenge-badge">⚡ Bridge Challenge!</span>
+          <span class="challenge-hint">Answer fast — 6 seconds!</span>
+        </div>
+        <div id="challenge-timer-wrap">
+          <div id="challenge-timer-bar" class="challenge-timer-bar"></div>
+        </div>
+        <p id="challenge-question" class="challenge-question">Question</p>
+        <div id="challenge-choices" class="challenge-choices">
+          <!-- buttons injected by JS -->
+        </div>
+        <p class="challenge-stakes">✅ Correct: +30 pts + 4s Shield &nbsp; ❌ Wrong: Stunned 3s</p>
       </div>
     </div>
 
@@ -83,8 +105,8 @@
     <div id="about-panel" class="hidden about-panel">
       <div class="about-card">
         <p id="about-kicker">About</p>
-        <h2 id="about-title">4 Snake Royale</h2>
-        <p id="about-body">A 4-player competitive snake game built with Phaser 3 and TypeScript. Play with up to 4 players on the same keyboard!</p>
+        <h2 id="about-title">Snake Arena: Logic Survival</h2>
+        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 arena with wall obstacles and bridge corridors. Eat 5 types of food for power-ups and points. Cross bridges to trigger timed logic challenges — answer correctly for a shield bonus, or get stunned for 3s! Outlast all AI snakes to win.</p>
         <p id="about-version-label">Version: <span id="about-version-value"></span></p>
         <button id="close-about" class="secondary-button">Close</button>
       </div>

@@ -484,3 +484,176 @@ kbd {
   font-weight: bold;
   min-width: 2rem;
 }
+
+/* ============================================================
+   Challenge Overlay
+   ============================================================ */
+.challenge-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 20;
+  padding: 1rem;
+}
+
+.challenge-card {
+  width: min(100%, 36rem);
+  background: linear-gradient(145deg, #1a1a2e, #16213e);
+  border: 2px solid #4ecca3;
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 0 40px rgba(78, 204, 163, 0.3);
+}
+
+.challenge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.challenge-badge {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #f1c40f;
+}
+
+.challenge-hint { font-size: 0.85rem; color: #a0aec0; }
+
+#challenge-timer-wrap {
+  height: 6px;
+  background: #2d3748;
+  border-radius: 3px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.challenge-timer-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4ecca3, #f1c40f);
+  border-radius: 3px;
+  width: 100%;
+  transform-origin: left;
+  animation: timer-drain 6s linear forwards;
+}
+
+@keyframes timer-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+.challenge-question {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #ffffff;
+  margin-bottom: 1.25rem;
+  line-height: 1.4;
+}
+
+.challenge-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.challenge-choices button {
+  padding: 0.85rem 1rem;
+  border: 2px solid #4a5568;
+  border-radius: 12px;
+  background: #2d3748;
+  color: #e2e8f0;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.challenge-choices button:hover {
+  border-color: #4ecca3;
+  background: #1a2744;
+  color: #4ecca3;
+}
+
+.challenge-stakes {
+  font-size: 0.8rem;
+  color: #718096;
+  text-align: center;
+  margin: 0;
+}
+
+/* ============================================================
+   Power-up Card
+   ============================================================ */
+.powerup-card {
+  background: rgba(30, 40, 50, 0.9);
+  border: 1px solid rgba(78, 204, 163, 0.3);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.powerup-card h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.powerup-display {
+  margin-top: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: #4ecca3;
+  min-height: 1.5rem;
+}
+
+.powerup-timer {
+  font-size: 0.9rem;
+  color: #a0aec0;
+  margin-top: 0.25rem;
+}
+
+/* ============================================================
+   Food Legend Card
+   ============================================================ */
+.food-legend-card {
+  background: rgba(30, 40, 50, 0.9);
+  border: 1px solid rgba(78, 204, 163, 0.15);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.food-legend-card h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.food-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+  color: #cbd5e0;
+}
+
+.food-dot { font-size: 1rem; }
+.apple-dot  { color: #e74c3c; }
+.speed-dot  { color: #f1c40f; }
+.shield-dot { color: #00cec9; }
+.skull-dot  { color: #6c5ce7; }
+.star-dot   { color: #fdcb6e; }
+
+/* ============================================================
+   Player score colors (Arena redesign)
+   ============================================================ */
+.human-color { border-left-color: #e74c3c; }
+.ai1-color   { border-left-color: #3498db; }
+.ai2-color   { border-left-color: #00b894; }
+.ai3-color   { border-left-color: #e17055; }
