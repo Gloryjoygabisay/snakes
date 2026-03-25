@@ -469,6 +469,16 @@ class SnakeScene extends Phaser.Scene {
 
   private endRound(result: 'win' | 'lose' | 'draw', score: number): void {
     this.roundOver = true;
+    // Dismiss any active logic challenge so it doesn't block the game-over screen
+    if (this.challengeActive) {
+      if (this.challengeTimeoutId !== null) {
+        clearTimeout(this.challengeTimeoutId);
+        this.challengeTimeoutId = null;
+      }
+      const overlay = document.getElementById('challenge-overlay');
+      if (overlay) overlay.classList.add('hidden');
+      this.challengeActive = false;
+    }
     this.overlayGraphics.fillStyle(0x000000, 0.65);
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     let msg: string;
