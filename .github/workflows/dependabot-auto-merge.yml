@@ -1,0 +1,106 @@
+name: Auto-merge Dependabot updates
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: |
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      !github.event.pull_request.draft &&
+      contains(github.event.pull_request.labels.*.name, 'automerge')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve and enable auto-merge
+        if: |
+          (
+            steps.metadata.outputs.package-ecosystem == 'npm_and_yarn' ||
+            steps.metadata.outputs.package-ecosystem == 'github_actions'
+          ) && (
+            steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+            steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          )
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number,
+              event: 'APPROVE',
+              body: 'Auto-approving safe Dependabot update.',
+            });
+
+            const data = await github.graphql(
+              `
+                query($owner: String!, $repo: String!, $pullNumber: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    autoMergeAllowed
+                    squashMergeAllowed
+                    rebaseMergeAllowed
+                    mergeCommitAllowed
+                    pullRequest(number: $pullNumber) {
+                      id
+                    }
+                  }
+                }
+              `,
+              {
+                owner,
+                repo,
+                pullNumber: pull_number,
+              },
+            );
+
+            if (!data.repository.autoMergeAllowed) {
+              core.setFailed('Repository auto-merge must be enabled in GitHub settings.');
+              return;
+            }
+
+            const mergeMethod = data.repository.squashMergeAllowed
+              ? 'SQUASH'
+              : data.repository.rebaseMergeAllowed
+                ? 'REBASE'
+                : data.repository.mergeCommitAllowed
+                  ? 'MERGE'
+                  : null;
+
+            if (!mergeMethod) {
+              core.setFailed('No merge method is enabled for this repository.');
+              return;
+            }
+
+            await github.graphql(
+              `
+                mutation($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+                  enablePullRequestAutoMerge(
+                    input: {
+                      pullRequestId: $pullRequestId
+                      mergeMethod: $mergeMethod
+                    }
+                  ) {
+                    clientMutationId
+                  }
+                }
+              `,
+              {
+                pullRequestId: data.repository.pullRequest.id,
+                mergeMethod,
+              },
+            );

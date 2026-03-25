@@ -4,24 +4,89 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Snakes Game</title>
-  <style>
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-      background-color: #1a1a2e;
-      font-family: Arial, sans-serif;
-    }
-    h1 {
-      color: #4ecca3;
-      font-size: 3rem;
-      text-align: center;
-    }
-  </style>
 </head>
 <body>
-  <h1>Welcome to Snakes Game</h1>
+  <div id="app">
+
+    <!-- ── Start screen ─────────────────────────────────────── -->
+    <div id="start-screen">
+      <h1 id="start-title">Snakes Game</h1>
+      <p id="start-blurb">Navigate your snake, eat food, and grow as long as you can without hitting the walls or yourself.</p>
+      <button id="start-button" class="primary-button">Start Game</button>
+      <div id="start-about-button-wrap">
+        <button id="start-about-button" class="secondary-button">About</button>
+      </div>
+      <p id="start-version-label">Version: <span id="start-version-value"></span></p>
+    </div>
+
+    <!-- ── Game shell ────────────────────────────────────────── -->
+    <div id="game-shell" class="hidden">
+
+      <div class="topbar">
+        <h1 id="title-text">Snakes Game</h1>
+        <button id="about-button" class="secondary-button">About</button>
+        <span id="version-label">Version:</span>
+        <span id="version-value"></span>
+      </div>
+
+      <div id="game-root"></div>
+
+      <div class="panel">
+
+        <div class="stats-card">
+          <h2>Score</h2>
+          <div class="score-display">
+            <span>Score</span>
+            <strong id="score-value">0</strong>
+          </div>
+          <div class="score-display">
+            <span>High Score</span>
+            <strong id="high-score-value">0</strong>
+          </div>
+        </div>
+
+        <div class="instructions-card">
+          <h2>How to Play</h2>
+          <p>Use arrow keys or WASD to steer your snake.</p>
+          <p>Eat the red food to grow longer and earn points.</p>
+          <p>Avoid hitting the walls or your own tail.</p>
+          <p>Press <kbd>Space</kbd> to restart after game over.</p>
+        </div>
+
+        <div class="controls-card">
+          <h2>Controls</h2>
+          <div class="controls-grid">
+            <kbd>↑</kbd><span>Move up</span>
+            <kbd>↓</kbd><span>Move down</span>
+            <kbd>←</kbd><span>Move left</span>
+            <kbd>→</kbd><span>Move right</span>
+            <kbd>W A S D</kbd><span>Also move</span>
+            <kbd>Space</kbd><span>Restart</span>
+          </div>
+        </div>
+
+        <div class="touch-controls">
+          <button class="touch-button touch-up" aria-label="Up">▲</button>
+          <button class="touch-button touch-left" aria-label="Left">◀</button>
+          <button class="touch-button touch-right" aria-label="Right">▶</button>
+          <button class="touch-button touch-down" aria-label="Down">▼</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── About panel ───────────────────────────────────────── -->
+    <div id="about-panel" class="hidden about-panel">
+      <div class="about-card">
+        <p id="about-kicker">About</p>
+        <h2 id="about-title">Snakes Game</h2>
+        <p id="about-body">A classic snake game built with Phaser 3 and TypeScript.</p>
+        <p id="about-version-label">Version: <span id="about-version-value"></span></p>
+        <button id="close-about" class="secondary-button">Close</button>
+      </div>
+    </div>
+
+  </div>
+  <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

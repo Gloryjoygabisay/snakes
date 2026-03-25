@@ -1,0 +1,415 @@
+/* ============================================================
+   CSS Custom Properties
+   ============================================================ */
+:root {
+  --bg: #0d1a0d;
+  --surface: #122012;
+  --surface2: #1a2e1a;
+  --accent: #4ecca3;
+  --accent-dark: #2a8a6a;
+  --danger: #e74c3c;
+  --text: #d4e8d4;
+  --text-muted: #7aa87a;
+  --radius: 8px;
+  --font: system-ui, -apple-system, sans-serif;
+}
+
+/* ============================================================
+   Reset / Base
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ============================================================
+   Start Screen
+   ============================================================ */
+#start-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+#start-title {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+#start-blurb {
+  max-width: 36ch;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+#start-version-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 1rem;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary-button,
+#start-button {
+  background: var(--accent);
+  color: #000;
+  font-weight: 700;
+  padding: 0.75rem 2.5rem;
+  font-size: 1.1rem;
+}
+
+.primary-button:hover,
+#start-button:hover {
+  opacity: 0.88;
+}
+
+.secondary-button,
+#start-about-button,
+#about-button,
+#close-about {
+  background: transparent;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+  padding: 0.5rem 1.5rem;
+}
+
+.secondary-button:hover,
+#start-about-button:hover,
+#about-button:hover,
+#close-about:hover {
+  background: var(--accent);
+  color: #000;
+}
+
+#start-about-button-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+/* ============================================================
+   Game Shell
+   ============================================================ */
+#game-shell {
+  flex: 1;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "topbar topbar"
+    "game   panel";
+  gap: 0;
+  min-height: 100vh;
+}
+
+/* Topbar */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--surface2);
+}
+
+.topbar h1 {
+  flex: 1;
+  font-size: 1.3rem;
+  color: var(--accent);
+}
+
+#version-label,
+#version-value {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Game area */
+#game-root {
+  grid-area: game;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--bg);
+}
+
+#game-root canvas {
+  max-width: 100%;
+  max-height: calc(100vh - 60px);
+  object-fit: contain;
+}
+
+/* Panel */
+.panel {
+  grid-area: panel;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  width: 260px;
+  background: var(--surface);
+  border-left: 1px solid var(--surface2);
+  overflow-y: auto;
+}
+
+/* Stats card */
+.stats-card,
+.instructions-card,
+.controls-card {
+  background: var(--surface2);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.stats-card h2,
+.instructions-card h2,
+.controls-card h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.score-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.score-display:last-child {
+  border-bottom: none;
+}
+
+.score-display span {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.score-display strong {
+  font-size: 1.2rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Instructions */
+.instructions-card p {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 0.4rem;
+}
+
+.instructions-card p:last-child {
+  margin-bottom: 0;
+}
+
+/* Controls */
+.controls-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  align-items: center;
+}
+
+kbd {
+  display: inline-block;
+  background: var(--bg);
+  border: 1px solid var(--surface2);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.8rem;
+  font-family: var(--font);
+  color: var(--text);
+}
+
+/* Version line */
+.version-line {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+/* ============================================================
+   About Panel (modal overlay)
+   ============================================================ */
+.about-panel {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1.5rem;
+}
+
+.about-card {
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 2rem;
+  max-width: 480px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+#about-kicker {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+#about-title {
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+
+#about-body {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+#about-version-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+#close-about {
+  align-self: flex-start;
+  margin-top: 0.5rem;
+}
+
+/* ============================================================
+   Touch controls
+   ============================================================ */
+.touch-controls {
+  display: none;
+  grid-template-areas:
+    ".    up    ."
+    "left .     right"
+    ".    down  .";
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(3, 52px);
+  gap: 4px;
+  justify-content: center;
+  padding: 0.75rem 0;
+}
+
+.touch-button {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--accent);
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.touch-up    { grid-area: up; }
+.touch-down  { grid-area: down; }
+.touch-left  { grid-area: left; }
+.touch-right { grid-area: right; }
+
+/* ============================================================
+   Responsive — 900px
+   ============================================================ */
+@media (max-width: 900px) {
+  #game-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "topbar"
+      "game"
+      "panel";
+  }
+
+  .panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--surface2);
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .stats-card,
+  .instructions-card,
+  .controls-card {
+    flex: 1 1 200px;
+  }
+}
+
+/* ============================================================
+   Responsive — 640px
+   ============================================================ */
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0.5rem 1rem;
+  }
+
+  .panel {
+    flex-direction: column;
+  }
+
+  .touch-controls {
+    display: grid;
+  }
+}
