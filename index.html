@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Snakes Game</title>
+  <title>4 Snake Royale</title>
 </head>
 <body>
   <div id="app">
 
     <!-- ── Start screen ─────────────────────────────────────── -->
     <div id="start-screen">
-      <h1 id="start-title">Snakes Game</h1>
-      <p id="start-blurb">Navigate your snake, eat food, and grow as long as you can without hitting the walls or yourself.</p>
+      <h1 id="start-title">4 Snake Royale</h1>
+      <p id="start-blurb">Four snakes, one arena. Control your snake, eat food, outlast your rivals. Last snake standing wins! 🏆</p>
       <button id="start-button" class="primary-button">Start Game</button>
       <div id="start-about-button-wrap">
         <button id="start-about-button" class="secondary-button">About</button>
@@ -23,7 +23,7 @@
     <div id="game-shell" class="hidden">
 
       <div class="topbar">
-        <h1 id="title-text">Snakes Game</h1>
+        <h1 id="title-text">4 Snake Royale</h1>
         <button id="about-button" class="secondary-button">About</button>
         <span id="version-label">Version:</span>
         <span id="version-value"></span>
@@ -33,43 +33,47 @@
 
       <div class="panel">
 
-        <div class="stats-card">
-          <h2>Score</h2>
-          <div class="score-display">
-            <span>Score</span>
-            <strong id="score-value">0</strong>
+        <div class="players-card">
+          <h2>Scores</h2>
+          <div class="player-score p1-color">
+            <span class="player-label">Player 1</span>
+            <span class="player-keys">Arrow Keys</span>
+            <strong id="p1-score">0</strong>
           </div>
-          <div class="score-display">
-            <span>High Score</span>
-            <strong id="high-score-value">0</strong>
+          <div class="player-score p2-color">
+            <span class="player-label">Player 2</span>
+            <span class="player-keys">WASD</span>
+            <strong id="p2-score">0</strong>
+          </div>
+          <div class="player-score p3-color">
+            <span class="player-label">Player 3</span>
+            <span class="player-keys">IJKL</span>
+            <strong id="p3-score">0</strong>
+          </div>
+          <div class="player-score p4-color">
+            <span class="player-label">Player 4</span>
+            <span class="player-keys">TFGH</span>
+            <strong id="p4-score">0</strong>
+          </div>
+        </div>
+
+        <div class="controls-card">
+          <h2>Controls</h2>
+          <div class="controls-list">
+            <div class="control-row p1-color"><span class="ctrl-name">P1</span><kbd>← ↑ → ↓</kbd></div>
+            <div class="control-row p2-color"><span class="ctrl-name">P2</span><kbd>W A S D</kbd></div>
+            <div class="control-row p3-color"><span class="ctrl-name">P3</span><kbd>I J K L</kbd></div>
+            <div class="control-row p4-color"><span class="ctrl-name">P4</span><kbd>T F G H</kbd></div>
           </div>
         </div>
 
         <div class="instructions-card">
           <h2>How to Play</h2>
-          <p>Use arrow keys or WASD to steer your snake.</p>
-          <p>Eat the red food to grow longer and earn points.</p>
-          <p>Avoid hitting the walls or your own tail.</p>
+          <p>All 4 snakes move simultaneously on the same arena.</p>
+          <p>Eat food to grow longer and earn 10 points.</p>
+          <p>Die if you hit a wall, yourself, or another snake.</p>
+          <p>The last snake alive wins the round!</p>
           <p>Press <kbd>Space</kbd> to restart after game over.</p>
-        </div>
-
-        <div class="controls-card">
-          <h2>Controls</h2>
-          <div class="controls-grid">
-            <kbd>↑</kbd><span>Move up</span>
-            <kbd>↓</kbd><span>Move down</span>
-            <kbd>←</kbd><span>Move left</span>
-            <kbd>→</kbd><span>Move right</span>
-            <kbd>W A S D</kbd><span>Also move</span>
-            <kbd>Space</kbd><span>Restart</span>
-          </div>
-        </div>
-
-        <div class="touch-controls">
-          <button class="touch-button touch-up" aria-label="Up">▲</button>
-          <button class="touch-button touch-left" aria-label="Left">◀</button>
-          <button class="touch-button touch-right" aria-label="Right">▶</button>
-          <button class="touch-button touch-down" aria-label="Down">▼</button>
         </div>
 
       </div>
@@ -79,8 +83,8 @@
     <div id="about-panel" class="hidden about-panel">
       <div class="about-card">
         <p id="about-kicker">About</p>
-        <h2 id="about-title">Snakes Game</h2>
-        <p id="about-body">A classic snake game built with Phaser 3 and TypeScript.</p>
+        <h2 id="about-title">4 Snake Royale</h2>
+        <p id="about-body">A 4-player competitive snake game built with Phaser 3 and TypeScript. Play with up to 4 players on the same keyboard!</p>
         <p id="about-version-label">Version: <span id="about-version-value"></span></p>
         <button id="close-about" class="secondary-button">Close</button>
       </div>
