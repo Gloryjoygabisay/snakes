@@ -108,6 +108,7 @@ class SnakeScene extends Phaser.Scene {
   private keyD!: Phaser.Input.Keyboard.Key;
   private spaceKey!: Phaser.Input.Keyboard.Key;
   private domListeners: Array<{ el: Element; event: string; fn: EventListener }> = [];
+  private tonguePhase = 0; // ms counter for tongue animation (cycle: 700ms)
 
   constructor() {
     super({ key: 'SnakeScene' });
@@ -586,6 +587,9 @@ class SnakeScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    // Tongue animation cycle (700ms: out for 220ms, retracted for 480ms)
+    this.tonguePhase = (this.tonguePhase + delta) % 700;
+
     // Decrement power-up and stun timers for all snakes
     for (const snake of this.snakes) {
       if (snake.powerUp.msRemaining > 0) {
@@ -648,6 +652,124 @@ class SnakeScene extends Phaser.Scene {
     this.updatePowerUpHUD();
   }
 
+  /** Darken a packed RGB hex color by the given factor (0–1). */
+  private darkenColor(color: number, factor: number): number {
+    const r = Math.floor(((color >> 16) & 0xff) * factor);
+    const g2 = Math.floor(((color >> 8) & 0xff) * factor);
+    const b = Math.floor((color & 0xff) * factor);
+    return (r << 16) | (g2 << 8) | b;
+  }
+
+  private drawRealSnake(g: Phaser.GameObjects.Graphics, snake: SnakeState): void {
+    const body = snake.body;
+    if (body.length === 0) return;
+
+    const BODY_R = 7;   // body segment radius
+    const HEAD_R = 9;   // head radius (slightly larger)
+    const TAIL_R = 4;   // tail tip radius (tapered)
+
+    const isStunned = snake.isHuman && snake.stunnedMs > 0;
+    const bodyColor = isStunned ? 0x95a5a6 : snake.bodyColor;
+    const headColor = isStunned ? 0xb2bec3 : snake.headColor;
+    const scaleColor = this.darkenColor(bodyColor, 0.72); // darker shade for scale texture
+    const fwd = DELTA[snake.direction];
+    const perp = { x: -fwd.y, y: fwd.x }; // perpendicular to direction
+
+    // ── 1. Connecting bridges between consecutive segments ──────────────────
+    // Draw filled rectangles between each pair of adjacent segment centres.
+    // This fills the gap so body looks like a continuous smooth tube.
+    g.fillStyle(bodyColor);
+    for (let i = 0; i < body.length - 1; i++) {
+      const a = body[i];
+      const b2 = body[i + 1];
+      const ax = a.x * CELL_SIZE + CELL_SIZE / 2;
+      const ay = a.y * CELL_SIZE + CELL_SIZE / 2;
+      const bx = b2.x * CELL_SIZE + CELL_SIZE / 2;
+      const by = b2.y * CELL_SIZE + CELL_SIZE / 2;
+      const segR = i === 0 ? HEAD_R : BODY_R;
+      const nextR = i + 1 === body.length - 1 ? TAIL_R : BODY_R;
+      const minR = Math.min(segR, nextR);
+      if (Math.abs(ax - bx) > Math.abs(ay - by)) {
+        // horizontal bridge
+        g.fillRect(Math.min(ax, bx), Math.min(ay, by) - minR, Math.abs(ax - bx), minR * 2);
+      } else {
+        // vertical bridge
+        g.fillRect(Math.min(ax, bx) - minR, Math.min(ay, by), minR * 2, Math.abs(ay - by));
+      }
+    }
+
+    // ── 2. Body segment circles (tail → neck, skip head) ───────────────────
+    for (let i = body.length - 1; i >= 1; i--) {
+      const seg = body[i];
+      const cx = seg.x * CELL_SIZE + CELL_SIZE / 2;
+      const cy = seg.y * CELL_SIZE + CELL_SIZE / 2;
+      const r = i === body.length - 1 ? TAIL_R : BODY_R;
+      // Alternate scale texture every 2 segments
+      g.fillStyle(i % 2 === 0 ? bodyColor : scaleColor);
+      g.fillCircle(cx, cy, r);
+    }
+
+    // ── 3. Head circle ──────────────────────────────────────────────────────
+    const h = body[0];
+    const hcx = h.x * CELL_SIZE + CELL_SIZE / 2;
+    const hcy = h.y * CELL_SIZE + CELL_SIZE / 2;
+    g.fillStyle(headColor);
+    g.fillCircle(hcx, hcy, HEAD_R);
+
+    // ── 4. Eyes ─────────────────────────────────────────────────────────────
+    // Position eyes forward and perpendicular from head centre
+    const EYE_FWD  = 3;   // px toward front
+    const EYE_SIDE = 5;   // px perpendicular from centre
+    const eye1 = {
+      x: hcx + fwd.x * EYE_FWD + perp.x * EYE_SIDE,
+      y: hcy + fwd.y * EYE_FWD + perp.y * EYE_SIDE,
+    };
+    const eye2 = {
+      x: hcx + fwd.x * EYE_FWD - perp.x * EYE_SIDE,
+      y: hcy + fwd.y * EYE_FWD - perp.y * EYE_SIDE,
+    };
+    g.fillStyle(0xffffff);
+    g.fillCircle(eye1.x, eye1.y, 2.5);
+    g.fillCircle(eye2.x, eye2.y, 2.5);
+    // Pupils — offset slightly toward front for a "looking forward" look
+    g.fillStyle(0x1a1a2e);
+    g.fillCircle(eye1.x + fwd.x * 0.8, eye1.y + fwd.y * 0.8, 1.5);
+    g.fillCircle(eye2.x + fwd.x * 0.8, eye2.y + fwd.y * 0.8, 1.5);
+
+    // ── 5. Tongue (animated — flicks out every 700 ms cycle) ────────────────
+    const tongueOut = this.tonguePhase < 220 && !isStunned;
+    if (tongueOut) {
+      const TONGUE_LEN = 9;
+      const FORK_LEN  = 4;
+      const FORK_SPREAD = 3;
+      const baseX = hcx + fwd.x * (HEAD_R + 1);
+      const baseY = hcy + fwd.y * (HEAD_R + 1);
+      const tipX  = baseX + fwd.x * TONGUE_LEN;
+      const tipY  = baseY + fwd.y * TONGUE_LEN;
+      g.lineStyle(1.5, 0xff6b9d, 1);
+      // Stem
+      g.beginPath(); g.moveTo(baseX, baseY); g.lineTo(tipX, tipY); g.strokePath();
+      // Left fork
+      g.beginPath();
+      g.moveTo(tipX, tipY);
+      g.lineTo(tipX + fwd.x * FORK_LEN + perp.x * FORK_SPREAD,
+               tipY + fwd.y * FORK_LEN + perp.y * FORK_SPREAD);
+      g.strokePath();
+      // Right fork
+      g.beginPath();
+      g.moveTo(tipX, tipY);
+      g.lineTo(tipX + fwd.x * FORK_LEN - perp.x * FORK_SPREAD,
+               tipY + fwd.y * FORK_LEN - perp.y * FORK_SPREAD);
+      g.strokePath();
+    }
+
+    // ── 6. Shield ring around head ──────────────────────────────────────────
+    if (snake.isHuman && snake.powerUp.kind === 'shield') {
+      g.lineStyle(2.5, 0x00cec9, 1);
+      g.strokeCircle(hcx, hcy, HEAD_R + 5);
+    }
+  }
+
   private draw(): void {
     const g = this.graphics;
     g.clear();
@@ -656,7 +778,7 @@ class SnakeScene extends Phaser.Scene {
     g.fillStyle(0x0d1a0d);
     g.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Grid lines
+    // Grid lines (very subtle)
     g.lineStyle(1, 0x1a2e1a, 1);
     for (let col = 0; col <= COLS; col++) {
       g.beginPath();
@@ -671,7 +793,7 @@ class SnakeScene extends Phaser.Scene {
       g.strokePath();
     }
 
-    // Bridge zone highlights (lighter background)
+    // Bridge zone highlights
     g.fillStyle(0x1e3a1e);
     for (let c = 13; c <= 18; c++) {
       g.fillRect(c * CELL_SIZE, 8 * CELL_SIZE, CELL_SIZE, CELL_SIZE);
@@ -722,36 +844,10 @@ class SnakeScene extends Phaser.Scene {
       }
     }
 
-    // Snakes
+    // Snakes — real snake rendering
     for (const snake of this.snakes) {
       if (!snake.alive) continue;
-
-      // Body segments
-      g.fillStyle(snake.bodyColor);
-      for (let i = 1; i < snake.body.length; i++) {
-        const seg = snake.body[i];
-        g.fillRect(seg.x * CELL_SIZE + 1, seg.y * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-      }
-
-      // Head
-      if (snake.body.length > 0) {
-        const h = snake.body[0];
-        const hpx = h.x * CELL_SIZE;
-        const hpy = h.y * CELL_SIZE;
-
-        if (snake.isHuman && snake.stunnedMs > 0) {
-          g.fillStyle(0x95a5a6);
-        } else {
-          g.fillStyle(snake.headColor);
-        }
-        g.fillRect(hpx + 1, hpy + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-
-        // Shield ring around head
-        if (snake.isHuman && snake.powerUp.kind === 'shield') {
-          g.lineStyle(2, 0x00cec9, 1);
-          g.strokeCircle(hpx + CELL_SIZE / 2, hpy + CELL_SIZE / 2, CELL_SIZE / 2 + 3);
-        }
-      }
+      this.drawRealSnake(g, snake);
     }
   }
 
