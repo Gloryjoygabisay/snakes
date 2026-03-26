@@ -8,63 +8,123 @@
 <body>
   <div id="app">
 
-    <!-- ── Start screen ─────────────────────────────────────── -->
+    <!-- ── Start Screen: Mode Selection ─────────────────────── -->
     <div id="start-screen">
-
-      <!-- Real canvas-drawn animated snakes as background -->
       <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
       <h1 id="start-title">Snake IQ Survival</h1>
-      <p id="start-blurb">3 levels of snake survival! 🟢 Simple → 🟡 Hard → 🔴 Challenging. Eat 10,000 foods per level to advance. Answer trivia to revive in harder levels! 🐍🏆</p>
+      <p id="start-blurb">Choose your mode. Eat 10,000 foods to complete each level. 🐍</p>
 
       <!-- Color picker -->
       <div id="color-picker">
         <p id="color-label">🎨 Choose your snake color</p>
         <div id="color-swatches">
-          <button class="color-swatch selected" data-body="#e74c3c" data-head="#ff6b6b" title="Red"     style="--c:#e74c3c"></button>
-          <button class="color-swatch"          data-body="#3498db" data-head="#74b9ff" title="Blue"    style="--c:#3498db"></button>
-          <button class="color-swatch"          data-body="#00b894" data-head="#55efc4" title="Green"   style="--c:#00b894"></button>
-          <button class="color-swatch"          data-body="#e17055" data-head="#fab1a0" title="Orange"  style="--c:#e17055"></button>
-          <button class="color-swatch"          data-body="#d4ac0d" data-head="#f1c40f" title="Yellow"  style="--c:#d4ac0d"></button>
-          <button class="color-swatch"          data-body="#6c5ce7" data-head="#a29bfe" title="Purple"  style="--c:#6c5ce7"></button>
-          <button class="color-swatch"          data-body="#e84393" data-head="#fd79a8" title="Pink"    style="--c:#e84393"></button>
-          <button class="color-swatch"          data-body="#00cec9" data-head="#81ecec" title="Cyan"    style="--c:#00cec9"></button>
+          <button class="color-swatch selected" data-body="#e74c3c" data-head="#ff6b6b" title="Red"    style="--c:#e74c3c"></button>
+          <button class="color-swatch"          data-body="#3498db" data-head="#74b9ff" title="Blue"   style="--c:#3498db"></button>
+          <button class="color-swatch"          data-body="#00b894" data-head="#55efc4" title="Green"  style="--c:#00b894"></button>
+          <button class="color-swatch"          data-body="#e17055" data-head="#fab1a0" title="Orange" style="--c:#e17055"></button>
+          <button class="color-swatch"          data-body="#d4ac0d" data-head="#f1c40f" title="Yellow" style="--c:#d4ac0d"></button>
+          <button class="color-swatch"          data-body="#6c5ce7" data-head="#a29bfe" title="Purple" style="--c:#6c5ce7"></button>
+          <button class="color-swatch"          data-body="#e84393" data-head="#fd79a8" title="Pink"   style="--c:#e84393"></button>
+          <button class="color-swatch"          data-body="#00cec9" data-head="#81ecec" title="Cyan"   style="--c:#00cec9"></button>
         </div>
       </div>
 
-      <button id="start-button" class="primary-button">Play Game</button>
+      <!-- Mode cards -->
+      <div id="mode-select">
+        <div class="mode-card explorer-card" data-mode="explorer">
+          <div class="mode-icon">🌿</div>
+          <div class="mode-info">
+            <div class="mode-name">Explorer Mode</div>
+            <div class="mode-tagline">Casual &amp; relaxed · No revival</div>
+          </div>
+          <div class="mode-badge easy-badge">Easy</div>
+        </div>
+        <div class="mode-card survivor-card" data-mode="survivor">
+          <div class="mode-icon">⚔️</div>
+          <div class="mode-info">
+            <div class="mode-name">Survivor Mode</div>
+            <div class="mode-tagline">Answer trivia to revive · Medium speed</div>
+          </div>
+          <div class="mode-badge medium-badge">Medium</div>
+        </div>
+        <div class="mode-card legend-card" data-mode="legend">
+          <div class="mode-icon">🔥</div>
+          <div class="mode-info">
+            <div class="mode-name">Legend Mode</div>
+            <div class="mode-tagline">One revival only · Blazing fast</div>
+          </div>
+          <div class="mode-badge hard-badge">Hard</div>
+        </div>
+      </div>
+
       <div id="start-about-button-wrap">
         <button id="start-about-button" class="secondary-button">About</button>
       </div>
       <p id="start-version-label">Version: <span id="start-version-value"></span></p>
     </div>
 
+    <!-- ── Level Screen ──────────────────────────────────────── -->
+    <div id="level-screen" class="hidden" data-mode="explorer">
+      <canvas id="level-bg-canvas" aria-hidden="true"></canvas>
+
+      <div id="level-screen-inner">
+        <button id="back-to-modes" class="back-button">← Back</button>
+        <div id="level-mode-header">
+          <span id="level-mode-icon">🌿</span>
+          <div>
+            <h2 id="level-mode-title">Explorer Mode</h2>
+            <p id="level-mode-tagline">Casual &amp; relaxed · No revival</p>
+          </div>
+        </div>
+
+        <div id="level-cards">
+          <div class="level-select-card" data-level="1">
+            <div class="level-num">Level 1</div>
+            <div class="level-lname" id="lvl1-name">Wanderer</div>
+            <div class="level-speed" id="lvl1-speed">🐢 Slow</div>
+            <button class="play-level-btn">Play</button>
+          </div>
+          <div class="level-select-card" data-level="2">
+            <div class="level-num">Level 2</div>
+            <div class="level-lname" id="lvl2-name">Tracker</div>
+            <div class="level-speed" id="lvl2-speed">🐇 Medium</div>
+            <button class="play-level-btn">Play</button>
+          </div>
+          <div class="level-select-card" data-level="3">
+            <div class="level-num">Level 3</div>
+            <div class="level-lname" id="lvl3-name">Pioneer</div>
+            <div class="level-speed" id="lvl3-speed">🚀 Fast</div>
+            <button class="play-level-btn">Play</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Game shell ────────────────────────────────────────── -->
     <div id="game-shell" class="hidden">
 
       <div class="topbar">
+        <button id="menu-button" class="secondary-button">☰ Menu</button>
         <h1 id="title-text">Snake IQ Survival</h1>
         <button id="about-button" class="secondary-button">About</button>
-        <span id="version-label">Version:</span>
-        <span id="version-value"></span>
       </div>
 
       <div id="game-root"></div>
 
-      <!-- Retry button (shown after game over) -->
       <button id="retry-btn" class="hidden">&#8635; Play Again</button>
 
       <div class="panel">
 
-        <!-- Level progress -->
+        <!-- Mode/Level progress -->
         <div class="level-card">
-          <h2 id="level-heading">🟢 Level 1 — Simple</h2>
+          <h2 id="level-heading">🌿 Explorer · Wanderer</h2>
           <div class="level-goal-label">Foods eaten</div>
           <div id="foods-eaten-count" class="foods-eaten-count">0 / 10,000</div>
           <div class="progress-bar-wrap">
             <div id="foods-progress-bar" class="progress-bar-fill"></div>
           </div>
-          <div class="level-goal-hint">Eat 10,000 foods → Level 2 Hard → Level 3 Challenging!</div>
+          <div class="level-goal-hint">Eat 10,000 foods to complete this level!</div>
         </div>
 
         <!-- Power-up HUD -->
@@ -109,9 +169,7 @@
         <!-- Instructions -->
         <div class="instructions-card">
           <h2>How to Play</h2>
-          <p>When your snake dies, a logic challenge pops up. Answer correctly to revive and keep playing! Answer wrong or run out of time and it's game over.</p>
-          <p>Touch &amp; hold the screen — the snake curves toward your finger. Move your finger to steer. Desktop: use <kbd>WASD</kbd> or arrow keys.</p>
-          <p><kbd>Space</kbd> to restart after game over.</p>
+          <p>Touch &amp; hold the screen — the snake steers toward your finger. Desktop: <kbd>WASD</kbd> or arrow keys. <kbd>Space</kbd> to restart.</p>
         </div>
 
       </div>
@@ -128,9 +186,7 @@
           <div id="challenge-timer-bar" class="challenge-timer-bar"></div>
         </div>
         <p id="challenge-question" class="challenge-question">Question</p>
-        <div id="challenge-choices" class="challenge-choices">
-          <!-- buttons injected by JS -->
-        </div>
+        <div id="challenge-choices" class="challenge-choices"></div>
         <p class="challenge-stakes">✅ Correct: You're revived! &nbsp; ❌ Wrong / Timeout: Game Over 💀</p>
       </div>
     </div>
@@ -140,7 +196,7 @@
       <div class="about-card">
         <p id="about-kicker">About</p>
         <h2 id="about-title">Snake IQ Survival</h2>
-        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 open arena. Eat 5 types of food for power-ups and points. 🟢 Level 1 Simple — no revival. 🟡 Level 2 Hard — answer a question to revive. 🔴 Level 3 Challenging — one revival only, fastest speed!</p>
+        <p id="about-body">1 human vs 3 AI snakes. Eat 10,000 foods to complete a level. 🌿 Explorer — casual, no revival. ⚔️ Survivor — answer trivia to revive (unlimited). 🔥 Legend — one trivia revival, fastest speed!</p>
         <p id="about-version-label">Version: <span id="about-version-value"></span></p>
         <button id="close-about" class="secondary-button">Close</button>
       </div>

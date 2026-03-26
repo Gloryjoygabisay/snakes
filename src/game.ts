@@ -10,24 +10,48 @@ const CANVAS_H = ROWS * CELL_SIZE;
 const FOOD_COUNT = 3;
 const SPEED_BOOST_TICK_MS = 80;
 
-interface LevelConfig {
-  name: string;
+type GameMode = 'explorer' | 'survivor' | 'legend';
+
+interface ModeConfig {
   emoji: string;
-  baseTick: number;
-  minTick: number;
-  tickAccel: number;
+  name: string;
+  levels: Array<{ name: string; baseTick: number; minTick: number; tickAccel: number }>;
   foodGoal: number;
-  hasRevival: boolean;
+  revival: 'none' | 'unlimited' | 'once';
 }
 
-const LEVEL_CONFIGS: LevelConfig[] = [
-  { name: 'Simple',      emoji: '🟢', baseTick: 150, minTick: 100, tickAccel: 2, foodGoal: 10000, hasRevival: false },
-  { name: 'Hard',        emoji: '🟡', baseTick: 120, minTick:  70, tickAccel: 3, foodGoal: 10000, hasRevival: true  },
-  { name: 'Challenging', emoji: '🔴', baseTick:  90, minTick:  50, tickAccel: 4, foodGoal: 10000, hasRevival: true  },
-];
+const MODE_CONFIGS: Record<GameMode, ModeConfig> = {
+  explorer: {
+    emoji: '🌿', name: 'Explorer Mode',
+    levels: [
+      { name: 'Wanderer', baseTick: 180, minTick: 120, tickAccel: 1 },
+      { name: 'Tracker',  baseTick: 150, minTick: 100, tickAccel: 2 },
+      { name: 'Pioneer',  baseTick: 130, minTick:  80, tickAccel: 2 },
+    ],
+    foodGoal: 10000, revival: 'none',
+  },
+  survivor: {
+    emoji: '⚔️', name: 'Survivor Mode',
+    levels: [
+      { name: 'Recruit', baseTick: 150, minTick:  90, tickAccel: 2 },
+      { name: 'Warrior', baseTick: 120, minTick:  70, tickAccel: 3 },
+      { name: 'Veteran', baseTick: 100, minTick:  60, tickAccel: 3 },
+    ],
+    foodGoal: 10000, revival: 'unlimited',
+  },
+  legend: {
+    emoji: '🔥', name: 'Legend Mode',
+    levels: [
+      { name: 'Spark',   baseTick: 120, minTick: 70, tickAccel: 3 },
+      { name: 'Blaze',   baseTick: 100, minTick: 55, tickAccel: 4 },
+      { name: 'Inferno', baseTick:  80, minTick: 45, tickAccel: 5 },
+    ],
+    foodGoal: 10000, revival: 'once',
+  },
+};
 
-// Persists across resetGame() calls; only resets on game destroy
-let currentLevel = 1;  // 1-indexed
+let gameMode: GameMode = 'explorer';
+let gameLevel: 1 | 2 | 3 = 1;
 
 // Human player color (set by createGame options, persists for all rounds)
 let humanBodyColor = 0xe74c3c;
@@ -132,14 +156,14 @@ function pickFoodKind(): FoodKind {
 class SnakeScene extends Phaser.Scene {
   private snakes: SnakeState[] = [];
   private foods: Food[] = [];
-  private globalTickMs = LEVEL_CONFIGS[currentLevel - 1].baseTick;
+  private globalTickMs = MODE_CONFIGS[gameMode].levels[gameLevel - 1].baseTick;
   private elapsed = 0;
   private roundOver = false;
   private humanFoodsEaten = 0;
   private challengeActive = false;
   private activeChallenge: Challenge | null = null;
   private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  private usedRevivalThisGame = false;  // Level 3: only 1 revival allowed
+  private usedRevivalThisGame = false;  // legend mode: only 1 revival allowed
   private pointerPos: { x: number; y: number } | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
@@ -273,7 +297,7 @@ class SnakeScene extends Phaser.Scene {
     ];
 
     this.foods = [];
-    this.globalTickMs = LEVEL_CONFIGS[currentLevel - 1].baseTick;
+    this.globalTickMs = MODE_CONFIGS[gameMode].levels[gameLevel - 1].baseTick;
     this.elapsed = 0;
     this.roundOver = false;
     this.humanFoodsEaten = 0;
@@ -524,7 +548,8 @@ class SnakeScene extends Phaser.Scene {
 
     // Accelerate global tick slightly per food eaten
     if (foodsEaten.length > 0) {
-      this.globalTickMs = Math.max(LEVEL_CONFIGS[currentLevel - 1].minTick, this.globalTickMs - LEVEL_CONFIGS[currentLevel - 1].tickAccel * foodsEaten.length);
+      const lvlCfg = MODE_CONFIGS[gameMode].levels[gameLevel - 1];
+      this.globalTickMs = Math.max(lvlCfg.minTick, this.globalTickMs - lvlCfg.tickAccel * foodsEaten.length);
     }
 
     this.updateScoreDisplays();
@@ -535,23 +560,22 @@ class SnakeScene extends Phaser.Scene {
 
   private checkWinCondition(): void {
     if (this.roundOver) return;
-    const cfg = LEVEL_CONFIGS[currentLevel - 1];
+    const modeCfg = MODE_CONFIGS[gameMode];
     const human = this.snakes[0];
 
-    if (this.humanFoodsEaten >= cfg.foodGoal) {
+    if (this.humanFoodsEaten >= modeCfg.foodGoal) {
       this.endRound('level-complete', human.score);
       return;
     }
 
-    if (!human.alive) {
-      if (cfg.hasRevival && !this.challengeActive) {
-        const level3OnlyOnce = currentLevel === 3 && this.usedRevivalThisGame;
-        if (!level3OnlyOnce) {
-          this.triggerDeathChallenge();
-          return;
-        }
+    if (!human.alive && !this.challengeActive) {
+      const canRevive = modeCfg.revival !== 'none' &&
+        !(modeCfg.revival === 'once' && this.usedRevivalThisGame);
+      if (canRevive) {
+        this.triggerDeathChallenge();
+      } else {
+        this.endRound('lose', human.score);
       }
-      this.endRound('lose', human.score);
     }
   }
 
@@ -565,20 +589,15 @@ class SnakeScene extends Phaser.Scene {
     }
     this.overlayGraphics.fillStyle(0x000000, 0.65);
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    const modeCfg = MODE_CONFIGS[gameMode];
+    const levelName = modeCfg.levels[gameLevel - 1].name;
     let msg: string;
     if (result === 'level-complete') {
-      if (currentLevel < LEVEL_CONFIGS.length) {
-        currentLevel++;
-        const next = LEVEL_CONFIGS[currentLevel - 1];
-        msg = `🎉 Level ${currentLevel} Unlocked!\n${next.emoji} ${next.name}\nScore: ${score}`;
-      } else {
-        currentLevel = 1; // reset after mastering
-        msg = `🏆 You mastered Snake IQ Survival!\nScore: ${score}\nRestarting from Level 1…`;
-      }
-    } else if (result === 'win') {
-      msg = `You Win! 🏆\nScore: ${score}`;
+      msg = `🎉 Level Complete!\n${modeCfg.emoji} ${levelName}\nScore: ${score}`;
     } else if (result === 'lose') {
       msg = `Game Over 💀\nScore: ${score}`;
+    } else if (result === 'win') {
+      msg = `You Win! 🏆\nScore: ${score}`;
     } else {
       msg = 'Draw! 🤝';
     }
@@ -624,14 +643,15 @@ class SnakeScene extends Phaser.Scene {
   }
 
   private updateLevelProgress(): void {
-    const cfg = LEVEL_CONFIGS[currentLevel - 1];
-    const pct = Math.min(100, (this.humanFoodsEaten / cfg.foodGoal) * 100);
+    const modeCfg  = MODE_CONFIGS[gameMode];
+    const levelName = modeCfg.levels[gameLevel - 1].name;
+    const pct = Math.min(100, (this.humanFoodsEaten / modeCfg.foodGoal) * 100);
     const countEl   = document.getElementById('foods-eaten-count');
     const barEl     = document.getElementById('foods-progress-bar');
     const headingEl = document.getElementById('level-heading');
-    if (countEl)   countEl.textContent   = `${this.humanFoodsEaten.toLocaleString()} / ${cfg.foodGoal.toLocaleString()}`;
+    if (countEl)   countEl.textContent   = `${this.humanFoodsEaten.toLocaleString()} / ${modeCfg.foodGoal.toLocaleString()}`;
     if (barEl)     barEl.style.width     = `${pct}%`;
-    if (headingEl) headingEl.textContent = `${cfg.emoji} Level ${currentLevel} — ${cfg.name}`;
+    if (headingEl) headingEl.textContent = `${modeCfg.emoji} Lv${gameLevel} — ${levelName}`;
   }
 
   private triggerDeathChallenge(): void {
@@ -953,9 +973,11 @@ class SnakeScene extends Phaser.Scene {
   }
 }
 
-export function createGame(opts: { bodyColor?: number; headColor?: number } = {}): GameController {
+export function createGame(opts: { bodyColor?: number; headColor?: number; mode?: GameMode; level?: 1 | 2 | 3 } = {}): GameController {
   if (opts.bodyColor !== undefined) humanBodyColor = opts.bodyColor;
   if (opts.headColor !== undefined) humanHeadColor = opts.headColor;
+  if (opts.mode  !== undefined) gameMode  = opts.mode;
+  if (opts.level !== undefined) gameLevel = opts.level;
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     width: CANVAS_W,
