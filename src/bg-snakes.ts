@@ -154,12 +154,12 @@ export function startBgAnimation(canvas: HTMLCanvasElement): () => void {
 
   // Build snakes after first resize tick so W/H are valid
   const snakes: BgSnake[] = [
-    makeSnake(-80,  H()*0.15, 0.15,    '#e74c3c', '#ff6b6b', 11, 2.0, 0.55, 0.40, 0,   20),
-    makeSnake(W()+80, H()*0.60, Math.PI-0.2, '#3498db', '#74b9ff', 10, 1.7, 0.65, 0.45, 2.0, 18),
-    makeSnake(-80,  H()*0.82, 0.05,    '#00b894', '#55efc4', 9,  1.5, 0.75, 0.50, 4.0, 16),
-    makeSnake(W()+80, H()*0.38, Math.PI+0.1, '#6c5ce7', '#a29bfe', 9,  1.6, 0.60, 0.42, 1.2, 15),
-    makeSnake(-80,  H()*0.50, -0.1,   '#f1c40f', '#ffeaa7', 8,  1.3, 0.85, 0.38, 3.0, 14),
-    makeSnake(W()+80, H()*0.22, Math.PI+0.05, '#e84393', '#fd79a8', 7,  1.4, 0.70, 0.35, 5.5, 13),
+    makeSnake(-80,  H()*0.15, 0.15,    '#e74c3c', '#ff6b6b', 20, 2.0, 0.55, 0.40, 0,   22),
+    makeSnake(W()+80, H()*0.60, Math.PI-0.2, '#3498db', '#74b9ff', 18, 1.7, 0.65, 0.45, 2.0, 20),
+    makeSnake(-80,  H()*0.82, 0.05,    '#00b894', '#55efc4', 17, 1.5, 0.75, 0.50, 4.0, 19),
+    makeSnake(W()+80, H()*0.38, Math.PI+0.1, '#6c5ce7', '#a29bfe', 17, 1.6, 0.60, 0.42, 1.2, 18),
+    makeSnake(-80,  H()*0.50, -0.1,   '#f1c40f', '#ffeaa7', 16, 1.3, 0.85, 0.38, 3.0, 17),
+    makeSnake(W()+80, H()*0.22, Math.PI+0.05, '#e84393', '#fd79a8', 15, 1.4, 0.70, 0.35, 5.5, 16),
   ];
 
   let last = performance.now();
