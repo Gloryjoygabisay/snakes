@@ -63,6 +63,7 @@ interface LevelConfig {
   exitZone?: { col: number; row: number };
   collectibles?: [number, number][];
   gloryStart?: { col: number; row: number };
+  bushes?: [number, number][];
 }
 
 const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
@@ -79,6 +80,7 @@ const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
       gloryStart: { col: 1, row: 12 },
       exitZone:   { col: 30, row: 12 },
       collectibles: [[6,11],[9,13],[12,11],[15,13],[18,11],[21,13],[24,11],[27,13]],
+      bushes: [[4,12],[8,10],[16,14],[22,12]],
     },
     // Explorer L2: Food Collection — open field, exit top-right
     {
@@ -92,6 +94,7 @@ const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
       gloryStart: { col: 1, row: 20 },
       exitZone:   { col: 30, row: 4 },
       collectibles: [[5,5],[9,5],[13,5],[17,5],[21,5],[25,5],[5,11],[9,11],[13,11],[17,11],[21,11],[25,11],[5,17],[9,17],[13,17],[17,17]],
+      bushes: [[3,10],[8,8],[15,14],[22,8]],
     },
     // Explorer L3: Simple Turns + Fences — L-shaped path
     {
@@ -106,6 +109,7 @@ const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
       gloryStart: { col: 1, row: 20 },
       exitZone:   { col: 30, row: 4 },
       collectibles: [[5,20],[5,15],[10,20],[10,9],[15,9],[20,12],[20,18],[25,18],[25,6],[28,6]],
+      bushes: [[3,15],[6,12],[14,8],[20,15]],
     },
     // Explorer L4: First Small Maze — Z-path
     {
@@ -641,6 +645,8 @@ class VenomArenaScene extends Phaser.Scene {
 
   private joystickActive = false;
   private dragDir: { dx: number; dy: number } | null = null;
+  private gloryTrail: Array<{x: number; y: number}> = [];
+  private readonly TRAIL_LENGTH = 6;
 
   private snakeTickTimer: Phaser.Time.TimerEvent | null = null;
 
@@ -681,6 +687,8 @@ class VenomArenaScene extends Phaser.Scene {
   // Exit-zone + collectible system
   private exitZone: { col: number; row: number } | null = null;
   private collectibles: Array<{ col: number; row: number; collected: boolean }> = [];
+  private bushCells: Set<string> = new Set();
+  private hiddenInBush = false;
   private exitPulseTimer = 0;
 
   constructor() {
@@ -735,6 +743,7 @@ class VenomArenaScene extends Phaser.Scene {
       lives: config.lives,
       invincibleMs: 0,
     };
+    this.gloryTrail = [];
 
     this.snakes = [];
     for (let i = 0; i < config.snakeCount; i++) {
@@ -789,6 +798,8 @@ class VenomArenaScene extends Phaser.Scene {
     // Exit zone + collectibles
     this.exitZone = config.exitZone ?? null;
     this.collectibles = (config.collectibles ?? []).map(([col, row]) => ({ col, row, collected: false }));
+    this.bushCells = new Set((config.bushes ?? []).map(([c, r]) => `${c},${r}`));
+    this.hiddenInBush = false;
     this.exitPulseTimer = 0;
 
     this.survivalMs = 0;
@@ -960,39 +971,51 @@ class VenomArenaScene extends Phaser.Scene {
 
   private moveSnakeStep(snake: SnakeEnemy, gc: Point): void {
     const head = snake.segments[0];
-    const dx = gc.x - head.x;
-    const dy = gc.y - head.y;
-
     let nx = head.x;
     let ny = head.y;
 
-    if (dx === 0 && dy === 0) {
-      // Already on top — skip
-    } else if (Math.abs(dx) >= Math.abs(dy)) {
-      // Try X first
-      const candX = head.x + Math.sign(dx);
-      if (!this.isWallOrClosedGate(candX, head.y)) {
+    if (this.hiddenInBush) {
+      // Random walk — snakes lose track of Glory in bushes
+      const dirs = [{dc:1,dr:0},{dc:-1,dr:0},{dc:0,dr:1},{dc:0,dr:-1}];
+      const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
+      const candX = head.x + randomDir.dc;
+      const candY = head.y + randomDir.dr;
+      if (!this.isWallOrClosedGate(candX, candY)) {
         nx = candX;
-      } else {
-        // Try Y
-        const candY = head.y + Math.sign(dy !== 0 ? dy : 1);
-        if (!this.isWallOrClosedGate(head.x, candY)) {
-          ny = candY;
-        }
-        // else stay
+        ny = candY;
       }
     } else {
-      // Try Y first
-      const candY = head.y + Math.sign(dy);
-      if (!this.isWallOrClosedGate(head.x, candY)) {
-        ny = candY;
-      } else {
-        // Try X
-        const candX = head.x + Math.sign(dx !== 0 ? dx : 1);
+      const dx = gc.x - head.x;
+      const dy = gc.y - head.y;
+
+      if (dx === 0 && dy === 0) {
+        // Already on top — skip
+      } else if (Math.abs(dx) >= Math.abs(dy)) {
+        // Try X first
+        const candX = head.x + Math.sign(dx);
         if (!this.isWallOrClosedGate(candX, head.y)) {
           nx = candX;
+        } else {
+          // Try Y
+          const candY = head.y + Math.sign(dy !== 0 ? dy : 1);
+          if (!this.isWallOrClosedGate(head.x, candY)) {
+            ny = candY;
+          }
+          // else stay
         }
-        // else stay
+      } else {
+        // Try Y first
+        const candY = head.y + Math.sign(dy);
+        if (!this.isWallOrClosedGate(head.x, candY)) {
+          ny = candY;
+        } else {
+          // Try X
+          const candX = head.x + Math.sign(dx !== 0 ? dx : 1);
+          if (!this.isWallOrClosedGate(candX, head.y)) {
+            nx = candX;
+          }
+          // else stay
+        }
       }
     }
 
@@ -1072,6 +1095,13 @@ class VenomArenaScene extends Phaser.Scene {
         this.glory.y = newYClamped;
       }
     }
+
+    // Update bush-hide state and glory trail
+    const gloryCol = Math.max(0, Math.min(COLS - 1, Math.floor(this.glory.x / CELL_SIZE)));
+    const gloryRow = Math.max(0, Math.min(ROWS - 1, Math.floor(this.glory.y / CELL_SIZE)));
+    this.hiddenInBush = this.bushCells.has(`${gloryCol},${gloryRow}`);
+    this.gloryTrail.unshift({ x: this.glory.x, y: this.glory.y });
+    if (this.gloryTrail.length > this.TRAIL_LENGTH) this.gloryTrail.pop();
 
     // Collision check
     if (this.glory.invincibleMs <= 0) {
@@ -1365,6 +1395,7 @@ class VenomArenaScene extends Phaser.Scene {
 
     this.drawBackground();
     this.drawCollectibles();
+    this.drawBushes();
     this.drawExitZone();
     this.drawPoisonTiles();
     this.drawIQGates();
@@ -1405,17 +1436,61 @@ class VenomArenaScene extends Phaser.Scene {
       if (c.collected) continue;
       const cx = c.col * CELL_SIZE + CELL_SIZE / 2;
       const cy = c.row * CELL_SIZE + CELL_SIZE / 2;
-      // Apple: red circle + green leaf
-      this.bgGraphics.fillStyle(0xdd2222);
-      this.bgGraphics.fillCircle(cx, cy + 1, 6);
-      this.bgGraphics.fillStyle(0x44aa22);
-      this.bgGraphics.fillEllipse(cx + 3, cy - 5, 7, 4);
+
+      // Apple shadow
+      this.bgGraphics.fillStyle(0x000000, 0.2);
+      this.bgGraphics.fillEllipse(cx + 1, cy + 7, 12, 5);
+
+      // Apple body — deep red gradient suggestion (two-tone)
+      this.bgGraphics.fillStyle(0xcc1111);
+      this.bgGraphics.fillCircle(cx, cy + 1, 7);
+      this.bgGraphics.fillStyle(0xff3333, 0.5);
+      this.bgGraphics.fillCircle(cx - 1, cy, 5);
+
+      // Apple indent at top
+      this.bgGraphics.fillStyle(0x990000, 0.8);
+      this.bgGraphics.fillCircle(cx, cy - 5, 2.5);
+
       // Stem
-      this.bgGraphics.fillStyle(0x664422);
-      this.bgGraphics.fillRect(cx - 0.5, cy - 7, 1, 4);
+      this.bgGraphics.fillStyle(0x5c3a1e);
+      this.bgGraphics.fillRect(cx - 0.5, cy - 8, 1.5, 4);
+
+      // Leaf
+      this.bgGraphics.fillStyle(0x2d8c22);
+      this.bgGraphics.fillEllipse(cx + 4, cy - 7, 9, 5);
+      // Leaf vein
+      this.bgGraphics.lineStyle(0.8, 0x1a5c14, 0.7);
+      this.bgGraphics.beginPath();
+      this.bgGraphics.moveTo(cx + 1, cy - 7);
+      this.bgGraphics.lineTo(cx + 7, cy - 7);
+      this.bgGraphics.strokePath();
+
       // Shine
-      this.bgGraphics.fillStyle(0xffffff, 0.5);
-      this.bgGraphics.fillCircle(cx - 2, cy - 1, 2);
+      this.bgGraphics.fillStyle(0xffffff, 0.55);
+      this.bgGraphics.fillCircle(cx - 2, cy - 1, 2.5);
+      this.bgGraphics.fillStyle(0xffffff, 0.25);
+      this.bgGraphics.fillCircle(cx - 1, cy + 2, 1.5);
+    }
+  }
+
+  private drawBushes(): void {
+    for (const key of this.bushCells) {
+      const [col, row] = key.split(',').map(Number);
+      const cx = col * CELL_SIZE + CELL_SIZE / 2;
+      const cy = row * CELL_SIZE + CELL_SIZE / 2;
+      // Bush: layered green circles
+      this.bgGraphics.fillStyle(0x1a6b2a, 0.9);
+      this.bgGraphics.fillCircle(cx, cy, 10);
+      this.bgGraphics.fillStyle(0x2d9440, 0.85);
+      this.bgGraphics.fillCircle(cx - 4, cy - 2, 7);
+      this.bgGraphics.fillCircle(cx + 4, cy - 2, 7);
+      this.bgGraphics.fillCircle(cx, cy - 5, 6);
+      // Lighter highlight on top
+      this.bgGraphics.fillStyle(0x55cc66, 0.4);
+      this.bgGraphics.fillCircle(cx - 2, cy - 5, 4);
+      // Dark shadow base
+      this.bgGraphics.fillStyle(0x0d3d14, 0.5);
+      this.bgGraphics.fillEllipse(cx, cy + 6, 18, 6);
     }
   }
 
@@ -1444,10 +1519,28 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    this.bgGraphics.fillStyle(0x060810);
+    this.bgGraphics.fillStyle(0x2d5a1b);
     this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    this.bgGraphics.fillStyle(0x14181e);
+    // Dirt path strip through middle rows (y=200 to y=280)
+    this.bgGraphics.fillStyle(0x8b6914, 0.55);
+    this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
+    // Path texture with lighter patches
+    this.bgGraphics.fillStyle(0xa07840, 0.25);
+    for (let i = 0; i < 20; i++) {
+      this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
+      this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
+    }
+    // Grass tufts (deterministic positions, skip path strip)
+    this.bgGraphics.fillStyle(0x3d8c28, 0.6);
+    for (let i = 0; i < 40; i++) {
+      const gx = ((i * 47 + 13) % CANVAS_W);
+      const gy = ((i * 31 + 7) % CANVAS_H);
+      if (gy > 195 && gy < 285) continue;
+      this.bgGraphics.fillEllipse(gx, gy, 8, 4);
+    }
+
+    this.bgGraphics.fillStyle(0x6b5744);
     for (const rock of TERRAIN_ROCKS) {
       this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
     }
@@ -1466,8 +1559,8 @@ class VenomArenaScene extends Phaser.Scene {
     // Draw walls — use brown plank style if level has an exit zone (bridge level)
     const isBridgeLevel = !!this.exitZone;
     if (isBridgeLevel) {
-      // Brown wooden planks
-      this.bgGraphics.fillStyle(0x7a4a1a);
+      // Wood planks (warm updated)
+      this.bgGraphics.fillStyle(0x8b6520);
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
@@ -1481,18 +1574,25 @@ class VenomArenaScene extends Phaser.Scene {
         this.bgGraphics.strokeRect(col * CELL_SIZE + 2, row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE - 4, 0);
       }
       // Lighter top edge highlight
-      this.bgGraphics.fillStyle(0xc8823a, 0.35);
+      this.bgGraphics.fillStyle(0xc89040, 0.35);
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
       }
     } else {
-      this.bgGraphics.fillStyle(0x334455);
+      // Rocky mountain stone
+      this.bgGraphics.fillStyle(0x7a6850);
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
       }
-      this.bgGraphics.lineStyle(1, 0x4466aa, 0.5);
+      // Top highlight strip
+      this.bgGraphics.fillStyle(0xaa9070, 0.4);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
+      }
+      this.bgGraphics.lineStyle(1, 0x5a4a38, 0.6);
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
@@ -1501,7 +1601,7 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawPoisonTiles(): void {
-    this.bgGraphics.fillStyle(0x550022, 0.7);
+    this.bgGraphics.fillStyle(0x9b1a00, 0.7);
     for (const key of this.poisonTiles) {
       const [col, row] = key.split(',').map(Number);
       this.bgGraphics.fillRect(col * CELL_SIZE + 1, row * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
@@ -1698,25 +1798,117 @@ class VenomArenaScene extends Phaser.Scene {
       if (!flashOn) return;
     }
 
-    const bodyColor = invincibleMs > 0 ? 0xff3333 : 0x6aaa6a;
-    const rimColor  = invincibleMs > 0 ? 0xff8888 : 0xaaffaa;
+    const alpha = this.hiddenInBush ? 0.35 : 1.0;
+    const trail = this.gloryTrail.length > 0 ? this.gloryTrail : [{ x, y }];
 
-    this.topGraphics.fillStyle(bodyColor);
-    this.topGraphics.fillCircle(x, y, 12);
+    // Body color: golden python — distinct from enemy snakes
+    const bodyColor  = invincibleMs > 0 ? 0xff6633 : 0xd4a017;
+    const bellyColor = invincibleMs > 0 ? 0xffaa66 : 0xf5e08a;
+    const scaleColor = invincibleMs > 0 ? 0xcc4400 : 0x8b6800;
+    const eyeColor   = 0xff4400;
 
-    if (this.dragDir) {
-      const fx = x + this.dragDir.dx * 8;
-      const fy = y + this.dragDir.dy * 8;
-      this.topGraphics.fillStyle(0xffffff, 0.9);
-      this.topGraphics.fillCircle(fx, fy, 3.5);
+    // Draw body segments from tail to neck (so head is on top)
+    const totalSegs = Math.min(trail.length, this.TRAIL_LENGTH);
+    for (let i = totalSegs - 1; i >= 1; i--) {
+      const seg = trail[i];
+      const t = i / this.TRAIL_LENGTH;
+      const radius = 10 * (1 - t * 0.5);
+
+      this.topGraphics.fillStyle(bodyColor, alpha * (1 - t * 0.3));
+      this.topGraphics.fillCircle(seg.x, seg.y, radius);
+
+      if (i % 2 === 0) {
+        this.topGraphics.fillStyle(scaleColor, alpha * 0.4 * (1 - t * 0.3));
+        this.topGraphics.fillCircle(seg.x, seg.y, radius * 0.6);
+      }
+
+      this.topGraphics.fillStyle(bellyColor, alpha * 0.3 * (1 - t * 0.5));
+      this.topGraphics.fillCircle(seg.x - 1, seg.y - 1, radius * 0.45);
     }
 
-    this.topGraphics.lineStyle(2, rimColor, 0.9);
-    this.topGraphics.strokeCircle(x, y, 12);
+    // Gap-fill between trail points
+    for (let i = 0; i < totalSegs - 1; i++) {
+      const a = trail[i];
+      const b = trail[i + 1];
+      const t = i / this.TRAIL_LENGTH;
+      const r = 9 * (1 - t * 0.5);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      this.topGraphics.fillStyle(bodyColor, alpha * (1 - t * 0.3) * 0.7);
+      this.topGraphics.fillCircle(mx, my, r);
+    }
 
+    // HEAD
+    const headRadius = 11;
+    let headDx = 0;
+    let headDy = -1;
+    if (this.dragDir) {
+      headDx = this.dragDir.dx;
+      headDy = this.dragDir.dy;
+    } else if (trail.length >= 2) {
+      const dx = trail[0].x - trail[1].x;
+      const dy = trail[0].y - trail[1].y;
+      const len = Math.hypot(dx, dy);
+      if (len > 0.5) { headDx = dx / len; headDy = dy / len; }
+    }
+
+    this.topGraphics.fillStyle(bodyColor, alpha);
+    this.topGraphics.fillCircle(x, y, headRadius);
+
+    this.topGraphics.fillStyle(scaleColor, alpha * 0.5);
+    this.topGraphics.fillCircle(x, y, headRadius * 0.65);
+
+    const snoutX = x + headDx * 7;
+    const snoutY = y + headDy * 7;
+    this.topGraphics.fillStyle(bodyColor, alpha);
+    this.topGraphics.fillEllipse(snoutX, snoutY, 10, 8);
+
+    const perpX = -headDy;
+    const perpY =  headDx;
+    const eyeOffFwd = 3;
+    const eyeOffSide = 5;
+    const eyeLX = x + headDx * eyeOffFwd + perpX * eyeOffSide;
+    const eyeLY = y + headDy * eyeOffFwd + perpY * eyeOffSide;
+    const eyeRX = x + headDx * eyeOffFwd - perpX * eyeOffSide;
+    const eyeRY = y + headDy * eyeOffFwd - perpY * eyeOffSide;
+
+    this.topGraphics.fillStyle(0xffee88, alpha);
+    this.topGraphics.fillCircle(eyeLX, eyeLY, 3.5);
+    this.topGraphics.fillCircle(eyeRX, eyeRY, 3.5);
+
+    this.topGraphics.fillStyle(eyeColor, alpha);
+    this.topGraphics.fillEllipse(eyeLX, eyeLY, 2.5, 3.5);
+    this.topGraphics.fillEllipse(eyeRX, eyeRY, 2.5, 3.5);
+
+    this.topGraphics.fillStyle(0xffffff, alpha * 0.8);
+    this.topGraphics.fillCircle(eyeLX - 0.8, eyeLY - 0.8, 1.2);
+    this.topGraphics.fillCircle(eyeRX - 0.8, eyeRY - 0.8, 1.2);
+
+    // Tongue (flicker)
+    if (Math.floor(this.tongueTimer / 700) % 3 !== 2) {
+      const tongueBase = 0.6;
+      const tx = x + headDx * (headRadius + 4);
+      const ty = y + headDy * (headRadius + 4);
+      this.topGraphics.lineStyle(1.5, 0xff8800, alpha * 0.9);
+      this.topGraphics.beginPath();
+      this.topGraphics.moveTo(x + headDx * headRadius, y + headDy * headRadius);
+      this.topGraphics.lineTo(tx, ty);
+      this.topGraphics.strokePath();
+      this.topGraphics.lineStyle(1, 0xff8800, alpha * 0.8);
+      this.topGraphics.beginPath();
+      this.topGraphics.moveTo(tx, ty);
+      this.topGraphics.lineTo(tx + headDx * 4 * tongueBase + perpX * 3, ty + headDy * 4 * tongueBase + perpY * 3);
+      this.topGraphics.strokePath();
+      this.topGraphics.beginPath();
+      this.topGraphics.moveTo(tx, ty);
+      this.topGraphics.lineTo(tx + headDx * 4 * tongueBase - perpX * 3, ty + headDy * 4 * tongueBase - perpY * 3);
+      this.topGraphics.strokePath();
+    }
+
+    // Speed power-up glow ring
     if (this.activePowerUp?.kind === 'speed') {
       this.topGraphics.lineStyle(3, 0xffff44, 0.7);
-      this.topGraphics.strokeCircle(x, y, 16);
+      this.topGraphics.strokeCircle(x, y, 18);
     }
   }
 
