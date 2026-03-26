@@ -166,16 +166,16 @@ export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void;
 
   // Build snakes after first resize tick so W/H are valid
   const snakes: BgSnake[] = [
-    makeSnake(-80,        H()*0.15, 0.15,         '#e74c3c', '#ff6b6b', 20, 2.0, 0.55, 0.40, 0.0, 22),
-    makeSnake(W()+80,     H()*0.60, Math.PI-0.2,  '#3498db', '#74b9ff', 18, 1.7, 0.65, 0.45, 2.0, 20),
-    makeSnake(-80,        H()*0.82, 0.05,          '#00b894', '#55efc4', 17, 1.5, 0.75, 0.50, 4.0, 19),
-    makeSnake(W()+80,     H()*0.38, Math.PI+0.1,  '#6c5ce7', '#a29bfe', 17, 1.6, 0.60, 0.42, 1.2, 18),
-    makeSnake(-80,        H()*0.50, -0.1,          '#f1c40f', '#ffeaa7', 16, 1.3, 0.85, 0.38, 3.0, 17),
-    makeSnake(W()+80,     H()*0.22, Math.PI+0.05, '#e84393', '#fd79a8', 15, 1.4, 0.70, 0.35, 5.5, 16),
-    makeSnake(W()*0.50,  -80,       Math.PI*0.5,  '#fd9644', '#ffc870', 19, 1.8, 0.60, 0.42, 1.5, 21),
-    makeSnake(W()*0.25,  H()+80,   -Math.PI*0.5,  '#00cec9', '#81ecec', 16, 1.6, 0.70, 0.48, 6.0, 18),
-    makeSnake(W()*0.75,  -80,       Math.PI*0.55, '#a29bfe', '#d6c7ff', 18, 1.9, 0.50, 0.36, 2.5, 20),
-    makeSnake(W()*0.50,  H()+80,   -Math.PI*0.6,  '#55efc4', '#b2fef0', 15, 1.4, 0.80, 0.44, 4.8, 17),
+    makeSnake(-80,        H()*0.15, 0.15,         '#00ff88', '#66ffbb', 20, 2.0, 0.55, 0.40, 0.0, 22),
+    makeSnake(W()+80,     H()*0.60, Math.PI-0.2,  '#00cc66', '#33ff99', 18, 1.7, 0.65, 0.45, 2.0, 20),
+    makeSnake(-80,        H()*0.82, 0.05,          '#00ff88', '#55efc4', 17, 1.5, 0.75, 0.50, 4.0, 19),
+    makeSnake(W()+80,     H()*0.38, Math.PI+0.1,  '#009944', '#00cc66', 17, 1.6, 0.60, 0.42, 1.2, 18),
+    makeSnake(-80,        H()*0.50, -0.1,          '#00e676', '#69ffb4', 16, 1.3, 0.85, 0.38, 3.0, 17),
+    makeSnake(W()+80,     H()*0.22, Math.PI+0.05, '#00ff88', '#b3ffe0', 15, 1.4, 0.70, 0.35, 5.5, 16),
+    makeSnake(W()*0.50,  -80,       Math.PI*0.5,  '#00cc66', '#33ffaa', 19, 1.8, 0.60, 0.42, 1.5, 21),
+    makeSnake(W()*0.25,  H()+80,   -Math.PI*0.5,  '#00ff88', '#80ffcc', 16, 1.6, 0.70, 0.48, 6.0, 18),
+    makeSnake(W()*0.75,  -80,       Math.PI*0.55, '#009944', '#00e676', 18, 1.9, 0.50, 0.36, 2.5, 20),
+    makeSnake(W()*0.50,  H()+80,   -Math.PI*0.6,  '#00cc88', '#55ffc4', 15, 1.4, 0.80, 0.44, 4.8, 17),
   ];
 
   function setColors(body: string, head: string): void {
@@ -193,6 +193,8 @@ export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void;
     last = now;
 
     ctx.clearRect(0, 0, W(), H());
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, 0, W(), H());
 
     for (const s of snakes) {
       s.t += dt;
