@@ -1065,9 +1065,11 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Move Glory with wall collision
     if (this.joystickActive && this.dragDir) {
+      // Base speed is capped at 1.2 px/frame for smooth, controllable movement
+      const baseSpd = Math.min(this.glory.speed, 1.2);
       const spd = this.activePowerUp?.kind === 'speed'
-        ? this.glory.speed * 1.8
-        : this.glory.speed;
+        ? baseSpd * 1.8
+        : baseSpd;
 
       // X axis: try movement, block on wall
       const newX = this.glory.x + this.dragDir.dx * spd;
@@ -1474,23 +1476,51 @@ class VenomArenaScene extends Phaser.Scene {
     const cx = this.exitZone.col * CELL_SIZE + CELL_SIZE / 2;
     const cy = this.exitZone.row * CELL_SIZE + CELL_SIZE / 2;
     const pulse = 0.55 + 0.45 * Math.sin(this.exitPulseTimer / 350);
-    // Outer glow ring
-    this.bgGraphics.fillStyle(0x00ff88, 0.15 * pulse);
+
+    // Golden glow behind the arch
+    this.bgGraphics.fillStyle(0xffcc00, 0.12 * pulse);
     this.bgGraphics.fillCircle(cx, cy, 22);
-    // Mid ring
-    this.bgGraphics.fillStyle(0x00ff88, 0.35 * pulse);
+    this.bgGraphics.fillStyle(0xffaa00, 0.25 * pulse);
     this.bgGraphics.fillCircle(cx, cy, 14);
-    // Core
-    this.bgGraphics.fillStyle(0x00ffaa, 0.85 * pulse);
-    this.bgGraphics.fillCircle(cx, cy, 8);
-    // Portal swirl dots
-    for (let i = 0; i < 6; i++) {
-      const angle = (this.exitPulseTimer / 600) + (i / 6) * Math.PI * 2;
-      const sx = cx + Math.cos(angle) * 11;
-      const sy = cy + Math.sin(angle) * 11;
-      this.bgGraphics.fillStyle(0xffffff, 0.7 * pulse);
-      this.bgGraphics.fillCircle(sx, sy, 2);
+
+    // Arch left pillar
+    this.bgGraphics.fillStyle(0x8b7355);
+    this.bgGraphics.fillRect(cx - 14, cy - 14, 7, 22);
+    // Arch right pillar
+    this.bgGraphics.fillRect(cx + 7, cy - 14, 7, 22);
+
+    // Stone highlight on pillars
+    this.bgGraphics.fillStyle(0xb09070, 0.6);
+    this.bgGraphics.fillRect(cx - 14, cy - 14, 3, 22);
+    this.bgGraphics.fillRect(cx + 7, cy - 14, 3, 22);
+
+    // Arch curved top (using filled ellipse cutout trick)
+    this.bgGraphics.fillStyle(0x8b7355);
+    this.bgGraphics.fillRect(cx - 14, cy - 18, 28, 8);
+    // Arch opening (darker inner arc)
+    this.bgGraphics.fillStyle(0x3a2a10);
+    this.bgGraphics.fillEllipse(cx, cy - 14, 20, 14);
+
+    // Glowing light inside arch (pulsing gold)
+    this.bgGraphics.fillStyle(0xffee88, 0.6 * pulse);
+    this.bgGraphics.fillEllipse(cx, cy - 10, 14, 10);
+    this.bgGraphics.fillStyle(0xffffff, 0.4 * pulse);
+    this.bgGraphics.fillCircle(cx, cy - 12, 4);
+
+    // Sparkle dots around arch
+    for (let i = 0; i < 5; i++) {
+      const angle = (this.exitPulseTimer / 500) + (i / 5) * Math.PI * 2;
+      const sx = cx + Math.cos(angle) * 18;
+      const sy = cy + Math.sin(angle) * 12;
+      this.bgGraphics.fillStyle(0xffdd44, 0.8 * pulse);
+      this.bgGraphics.fillCircle(sx, sy, 1.5);
     }
+
+    // "GOAL" label above arch
+    this.bgGraphics.fillStyle(0x000000, 0.55);
+    this.bgGraphics.fillRoundedRect(cx - 16, cy - 30, 32, 11, 4);
+    this.bgGraphics.fillStyle(0xffdd00, 0.95);
+    this.bgGraphics.fillRoundedRect(cx - 15, cy - 31, 30, 10, 3);
   }
 
   private drawBackground(): void {
@@ -1512,8 +1542,66 @@ class VenomArenaScene extends Phaser.Scene {
       const gx = ((i * 47 + 13) % CANVAS_W);
       const gy = ((i * 31 + 7) % CANVAS_H);
       if (gy > 195 && gy < 285) continue;
+      if (gy > 420) continue; // skip river area
       this.bgGraphics.fillEllipse(gx, gy, 8, 4);
     }
+
+    // ── River at the bottom ──────────────────────────────────
+    const riverY = 432;
+    const riverH = 48;
+    // River water (animated shimmer via exitPulseTimer for a ripple wave)
+    this.bgGraphics.fillStyle(0x1565c0);
+    this.bgGraphics.fillRect(0, riverY, CANVAS_W, riverH);
+    // Lighter blue mid-layer
+    this.bgGraphics.fillStyle(0x1e88e5, 0.7);
+    this.bgGraphics.fillRect(0, riverY + 8, CANVAS_W, riverH - 16);
+    // Ripple highlights (wavy lines across the river)
+    this.bgGraphics.fillStyle(0x64b5f6, 0.45);
+    for (let i = 0; i < 12; i++) {
+      const wx = (i * 56 + ((this.exitPulseTimer / 8) % 56)) % CANVAS_W;
+      this.bgGraphics.fillEllipse(wx, riverY + 16, 40, 5);
+      this.bgGraphics.fillEllipse(wx + 28, riverY + 30, 30, 4);
+    }
+    // Deep water edge at very bottom
+    this.bgGraphics.fillStyle(0x0d47a1, 0.6);
+    this.bgGraphics.fillRect(0, riverY + riverH - 8, CANVAS_W, 8);
+
+    // Rocks in the river (blue-grey rounded boulders)
+    const riverRocks = [
+      { x: 45,  y: riverY + 22, rw: 22, rh: 14 },
+      { x: 120, y: riverY + 14, rw: 18, rh: 11 },
+      { x: 195, y: riverY + 28, rw: 26, rh: 15 },
+      { x: 290, y: riverY + 18, rw: 20, rh: 12 },
+      { x: 370, y: riverY + 30, rw: 24, rh: 14 },
+      { x: 450, y: riverY + 16, rw: 19, rh: 11 },
+      { x: 530, y: riverY + 24, rw: 22, rh: 13 },
+      { x: 610, y: riverY + 20, rw: 17, rh: 10 },
+    ];
+    for (const r of riverRocks) {
+      // Shadow
+      this.bgGraphics.fillStyle(0x0d47a1, 0.5);
+      this.bgGraphics.fillEllipse(r.x + 2, r.y + 3, r.rw, r.rh * 0.6);
+      // Rock body (blue-grey)
+      this.bgGraphics.fillStyle(0x4a6fa5);
+      this.bgGraphics.fillEllipse(r.x, r.y, r.rw, r.rh);
+      // Highlight
+      this.bgGraphics.fillStyle(0x7fa8d8, 0.55);
+      this.bgGraphics.fillEllipse(r.x - 3, r.y - 3, r.rw * 0.55, r.rh * 0.5);
+    }
+
+    // Fence along the top edge of the river (bottom of the pathway)
+    this.bgGraphics.fillStyle(0xc8a050);
+    for (let fx = 4; fx < CANVAS_W; fx += 22) {
+      // Fence post
+      this.bgGraphics.fillRect(fx, riverY - 10, 6, 14);
+      this.bgGraphics.fillStyle(0xe8c070);
+      this.bgGraphics.fillRect(fx, riverY - 10, 6, 4);
+      this.bgGraphics.fillStyle(0xc8a050);
+    }
+    // Horizontal fence rail
+    this.bgGraphics.fillStyle(0xb08840);
+    this.bgGraphics.fillRect(0, riverY - 5, CANVAS_W, 3);
+    this.bgGraphics.fillRect(0, riverY - 1, CANVAS_W, 2);
     this.bgGraphics.fillStyle(0x6b5744);
     for (const rock of TERRAIN_ROCKS) {
       this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
