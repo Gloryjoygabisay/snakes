@@ -140,6 +140,20 @@ class SnakeScene extends Phaser.Scene {
     });
     this.input.on('pointercancel', () => { this.swipeStart = null; });
 
+    // Direction buttons (dispatched by DOM touch controls)
+    const dirHandler = (e: Event) => {
+      const dir = (e as CustomEvent<string>).detail as Direction;
+      const human = this.snakes?.[0];
+      if (human?.alive && !this.challengeActive) this.queueDirection(human, dir);
+    };
+    window.addEventListener('snake-dir', dirHandler);
+    this.domListeners.push({ el: window as unknown as Element, event: 'snake-dir', fn: dirHandler as EventListener });
+
+    // Retry button
+    const retryHandler = () => { if (this.roundOver) this.resetGame(); };
+    window.addEventListener('snake-retry', retryHandler);
+    this.domListeners.push({ el: window as unknown as Element, event: 'snake-retry', fn: retryHandler as EventListener });
+
     this.resetGame();
   }
 
@@ -211,6 +225,7 @@ class SnakeScene extends Phaser.Scene {
 
     const overlay = document.getElementById('challenge-overlay');
     if (overlay) overlay.classList.add('hidden');
+    document.getElementById('retry-btn')?.classList.add('hidden');
 
     this.overlayText.setText('');
     this.overlayGraphics.clear();
@@ -484,13 +499,14 @@ class SnakeScene extends Phaser.Scene {
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     let msg: string;
     if (result === 'win') {
-      msg = `You Win! 🏆\nScore: ${score}\n\nSPACE to play again`;
+      msg = `You Win! 🏆\nScore: ${score}`;
     } else if (result === 'lose') {
-      msg = `Game Over 💀\nScore: ${score}\n\nSPACE to play again`;
+      msg = `Game Over 💀\nScore: ${score}`;
     } else {
-      msg = 'Draw! 🤝\n\nSPACE to play again';
+      msg = 'Draw! 🤝';
     }
     this.overlayText.setText(msg);
+    document.getElementById('retry-btn')?.classList.remove('hidden');
   }
 
   private updateScoreDisplays(): void {

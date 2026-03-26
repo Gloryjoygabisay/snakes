@@ -136,11 +136,13 @@ button:disabled {
 #game-shell {
   flex: 1;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto auto;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "topbar topbar"
-    "game   panel";
+    "game   panel"
+    "dpad   panel"
+    "retry  panel";
   gap: 0;
   min-height: 100vh;
 }
@@ -335,6 +337,86 @@ kbd {
 }
 
 /* ============================================================
+   Direction buttons (D-pad)
+   ============================================================ */
+#dpad {
+  grid-area: dpad;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 1rem 1rem 0.5rem;
+  background: var(--bg);
+}
+
+.dir-middle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dir-center {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface2);
+  opacity: 0.4;
+}
+
+.dir-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 2px solid rgba(78, 204, 163, 0.4);
+  color: var(--accent);
+  font-size: 2rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s, border-color 0.1s, transform 0.08s;
+  cursor: pointer;
+}
+
+.dir-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.dir-btn:active {
+  background: var(--accent-dark);
+  border-color: var(--accent);
+  transform: scale(0.88);
+}
+
+/* ============================================================
+   Retry button
+   ============================================================ */
+#retry-btn {
+  grid-area: retry;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.5rem auto 1rem;
+  padding: 0.75rem 2.5rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+#retry-btn:hover { opacity: 0.88; }
+#retry-btn:active { transform: scale(0.96); }
+
+/* ============================================================
    Touch controls (legacy class kept for compat)
    ============================================================ */
 .touch-controls {
@@ -379,6 +461,8 @@ kbd {
     grid-template-areas:
       "topbar"
       "game"
+      "dpad"
+      "retry"
       "panel";
   }
 

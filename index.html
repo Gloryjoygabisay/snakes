@@ -31,6 +31,20 @@
 
       <div id="game-root"></div>
 
+      <!-- On-screen direction buttons -->
+      <div id="dpad">
+        <button class="dir-btn dir-up" data-dir="UP">&#8679;</button>
+        <div class="dir-middle-row">
+          <button class="dir-btn dir-left" data-dir="LEFT">&#8678;</button>
+          <div class="dir-center"></div>
+          <button class="dir-btn dir-right" data-dir="RIGHT">&#8680;</button>
+        </div>
+        <button class="dir-btn dir-down" data-dir="DOWN">&#8681;</button>
+      </div>
+
+      <!-- Retry button (shown after game over) -->
+      <button id="retry-btn" class="hidden">&#8635; Play Again</button>
+
       <div class="panel">
 
         <!-- Power-up HUD -->
@@ -45,7 +59,7 @@
           <h2>Scores</h2>
           <div class="player-score human-color">
             <span class="player-label">🎮 You</span>
-            <span class="player-keys">Swipe / WASD</span>
+            <span class="player-keys">Swipe / Buttons / WASD</span>
             <strong id="p1-score">0</strong>
           </div>
           <div class="player-score ai1-color">
@@ -76,7 +90,7 @@
         <div class="instructions-card">
           <h2>How to Play</h2>
           <p>When your snake dies, a logic challenge pops up. Answer correctly to revive and keep playing! Answer wrong or run out of time and it's game over.</p>
-          <p>Swipe anywhere on the game to steer. On desktop use <kbd>WASD</kbd> or arrow keys.</p>
+          <p>Swipe on the canvas, tap the arrow buttons, or use <kbd>WASD</kbd> to steer.</p>
           <p><kbd>Space</kbd> to restart after game over.</p>
         </div>
 
