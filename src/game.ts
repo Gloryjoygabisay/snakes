@@ -63,22 +63,6 @@ const CHALLENGES: Challenge[] = [
   { question: 'What is 15% of 200?', choices: ['25', '30', '35', '40'], correct: 1 },
 ];
 
-function buildWalls(): Set<string> {
-  const w = new Set<string>();
-  for (let c = 1; c <= 12; c++) w.add(`${c},8`);
-  for (let c = 19; c <= 30; c++) w.add(`${c},8`);
-  for (let c = 1; c <= 12; c++) w.add(`${c},15`);
-  for (let c = 19; c <= 30; c++) w.add(`${c},15`);
-  return w;
-}
-const WALLS = buildWalls();
-
-const BRIDGE_ZONES = new Set<string>();
-for (let c = 13; c <= 18; c++) {
-  BRIDGE_ZONES.add(`${c},8`);
-  BRIDGE_ZONES.add(`${c},15`);
-}
-
 function pickFoodKind(): FoodKind {
   const r = Math.random() * 100;
   if (r < 50) return 'apple';
@@ -95,7 +79,6 @@ class SnakeScene extends Phaser.Scene {
   private elapsed = 0;
   private roundOver = false;
   private challengeActive = false;
-  private solvedBridges = new Set<string>();
   private activeChallenge: Challenge | null = null;
   private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
@@ -195,7 +178,6 @@ class SnakeScene extends Phaser.Scene {
     this.elapsed = 0;
     this.roundOver = false;
     this.challengeActive = false;
-    this.solvedBridges = new Set<string>();
 
     if (this.challengeTimeoutId !== null) {
       clearTimeout(this.challengeTimeoutId);
@@ -230,7 +212,6 @@ class SnakeScene extends Phaser.Scene {
   private spawnFood(): void {
     const occupied = this.allBodyCells();
     for (const f of this.foods) occupied.add(`${f.x},${f.y}`);
-    for (const w of WALLS) occupied.add(w);
 
     let fx = 0;
     let fy = 0;
@@ -251,7 +232,7 @@ class SnakeScene extends Phaser.Scene {
   }
 
   private aiChooseDirection(snake: SnakeState): Direction {
-    const occupied = new Set<string>(WALLS);
+    const occupied = new Set<string>();
     for (const s of this.snakes) {
       if (s.alive) {
         for (const p of s.body) occupied.add(`${p.x},${p.y}`);
@@ -319,13 +300,10 @@ class SnakeScene extends Phaser.Scene {
       newHeads.set(snake.id, { x: head.x + d.x, y: head.y + d.y });
     }
 
-    // Border and wall collisions
+    // Border collisions
     for (const snake of alive) {
       const nh = newHeads.get(snake.id)!;
-      if (
-        nh.x < 0 || nh.x >= COLS || nh.y < 0 || nh.y >= ROWS ||
-        WALLS.has(`${nh.x},${nh.y}`)
-      ) {
+      if (nh.x < 0 || nh.x >= COLS || nh.y < 0 || nh.y >= ROWS) {
         snake.alive = false;
       }
     }
@@ -454,16 +432,15 @@ class SnakeScene extends Phaser.Scene {
   }
 
   private checkWinCondition(): void {
-    if (this.roundOver) return;
+    if (this.roundOver || this.challengeActive) return;
     const human = this.snakes[0];
     const aiAlive = this.snakes.filter((s) => !s.isHuman && s.alive);
 
     if (aiAlive.length === 0 && human.alive) {
       this.endRound('win', human.score);
-    } else if (!human.alive && aiAlive.length > 0) {
-      this.endRound('lose', human.score);
-    } else if (!human.alive && aiAlive.length === 0) {
-      this.endRound('draw', 0);
+    } else if (!human.alive) {
+      // Give the player a second chance via a logic question
+      this.triggerDeathChallenge();
     }
   }
 
@@ -529,25 +506,24 @@ class SnakeScene extends Phaser.Scene {
     }
   }
 
-  private triggerChallenge(cellKey: string): void {
+  private triggerDeathChallenge(): void {
     this.challengeActive = true;
-    this.solvedBridges.add(cellKey);
     this.activeChallenge = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
 
     const questionEl = document.getElementById('challenge-question');
-    const choicesEl = document.getElementById('challenge-choices');
-    const overlay = document.getElementById('challenge-overlay');
+    const choicesEl  = document.getElementById('challenge-choices');
+    const overlay    = document.getElementById('challenge-overlay');
 
     if (questionEl) questionEl.textContent = this.activeChallenge.question;
 
     if (choicesEl) {
       choicesEl.innerHTML = '';
 
-      // Reset timer bar animation
+      // Restart the timer bar animation
       const timerBar = document.getElementById('challenge-timer-bar');
       if (timerBar) {
         timerBar.style.animation = 'none';
-        void timerBar.offsetWidth; // force reflow to restart animation
+        void timerBar.offsetWidth; // force reflow
         timerBar.style.animation = '';
       }
 
@@ -557,7 +533,7 @@ class SnakeScene extends Phaser.Scene {
         btn.textContent = choice;
         const fn: EventListener = () => {
           if (!this.challengeActive) return;
-          this.resolveChallenge(idx === challenge.correct);
+          this.resolveDeathChallenge(idx === challenge.correct);
         };
         btn.addEventListener('click', fn);
         this.domListeners.push({ el: btn, event: 'click', fn });
@@ -568,11 +544,11 @@ class SnakeScene extends Phaser.Scene {
     if (overlay) overlay.classList.remove('hidden');
 
     this.challengeTimeoutId = setTimeout(() => {
-      if (this.challengeActive) this.resolveChallenge(false);
+      if (this.challengeActive) this.resolveDeathChallenge(false);
     }, 6000);
   }
 
-  private resolveChallenge(correct: boolean): void {
+  private resolveDeathChallenge(correct: boolean): void {
     if (!this.challengeActive) return;
     if (this.challengeTimeoutId !== null) {
       clearTimeout(this.challengeTimeoutId);
@@ -580,18 +556,35 @@ class SnakeScene extends Phaser.Scene {
     }
     this.activeChallenge = null;
 
-    const human = this.snakes[0];
-    if (correct) {
-      human.score += 30;
-      human.powerUp = { kind: 'shield', msRemaining: 4000 };
-    } else {
-      human.stunnedMs = 3000;
-    }
-
     const overlay = document.getElementById('challenge-overlay');
     if (overlay) overlay.classList.add('hidden');
 
     this.challengeActive = false;
+
+    const human = this.snakes[0];
+    if (correct) {
+      // Revive — respawn at starting position, keep score
+      human.body = [{ x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }];
+      human.direction = 'RIGHT';
+      human.nextDirection = 'RIGHT';
+      human.alive = true;
+      human.stunnedMs = 0;
+      human.powerUp = { kind: 'none', msRemaining: 0 };
+      // Check if all AI are already dead — if so, the revived player wins
+      const aiAlive = this.snakes.filter((s) => !s.isHuman && s.alive);
+      if (aiAlive.length === 0) {
+        this.endRound('win', human.score);
+      }
+    } else {
+      // Wrong / timed out — real game over
+      const aiAlive = this.snakes.filter((s) => !s.isHuman && s.alive);
+      if (aiAlive.length === 0) {
+        this.endRound('draw', 0);
+      } else {
+        this.endRound('lose', human.score);
+      }
+    }
+
     this.updateScoreDisplays();
     this.updatePowerUpHUD();
   }
@@ -646,16 +639,6 @@ class SnakeScene extends Phaser.Scene {
       this.elapsed -= tickMs;
       this.tick();
       if (this.roundOver || this.challengeActive) break;
-
-      // Check bridge zone after tick
-      if (human.alive && human.body.length > 0) {
-        const head = human.body[0];
-        const key = `${head.x},${head.y}`;
-        if (BRIDGE_ZONES.has(key) && !this.solvedBridges.has(key)) {
-          this.triggerChallenge(key);
-          break;
-        }
-      }
     }
 
     this.draw();
@@ -801,24 +784,6 @@ class SnakeScene extends Phaser.Scene {
       g.moveTo(0, row * CELL_SIZE);
       g.lineTo(CANVAS_W, row * CELL_SIZE);
       g.strokePath();
-    }
-
-    // Bridge zone highlights
-    g.fillStyle(0x1e3a1e);
-    for (let c = 13; c <= 18; c++) {
-      g.fillRect(c * CELL_SIZE, 8 * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      g.fillRect(c * CELL_SIZE, 15 * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    }
-
-    // Walls
-    for (const key of WALLS) {
-      const parts = key.split(',');
-      const wx = Number(parts[0]);
-      const wy = Number(parts[1]);
-      g.fillStyle(0x2d3436);
-      g.fillRect(wx * CELL_SIZE + 1, wy * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-      g.lineStyle(2, 0x636e72, 1);
-      g.strokeRect(wx * CELL_SIZE + 1, wy * CELL_SIZE + 1, CELL_SIZE - 2, CELL_SIZE - 2);
     }
 
     // Food

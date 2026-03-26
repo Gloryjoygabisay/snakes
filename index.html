@@ -11,7 +11,7 @@
     <!-- ── Start screen ─────────────────────────────────────── -->
     <div id="start-screen">
       <h1 id="start-title">Snake Arena: Logic Survival</h1>
-      <p id="start-blurb">Navigate the arena, eat power foods, solve bridge logic challenges, and outlast 3 AI snakes. Strategy + survival = victory! 🧠🐍</p>
+      <p id="start-blurb">Navigate the arena, eat power foods, and outlast 3 AI snakes. Die and get a second chance — answer a logic question to revive! 🧠🐍</p>
       <button id="start-button" class="primary-button">Start Game</button>
       <div id="start-about-button-wrap">
         <button id="start-about-button" class="secondary-button">About</button>
@@ -75,7 +75,7 @@
         <!-- Instructions -->
         <div class="instructions-card">
           <h2>How to Play</h2>
-          <p>Navigate through bridges to trigger logic challenges. Answer correctly for shield + 30 pts! Answer wrong and get stunned for 3s.</p>
+          <p>When your snake dies, a logic challenge pops up. Answer correctly to revive and keep playing! Answer wrong or run out of time and it's game over.</p>
           <p>Eat power foods, outlast 3 AI snakes, survive!</p>
           <p><kbd>Space</kbd> to restart after game over.</p>
         </div>
@@ -87,8 +87,8 @@
     <div id="challenge-overlay" class="hidden challenge-overlay">
       <div class="challenge-card">
         <div class="challenge-header">
-          <span class="challenge-badge">⚡ Bridge Challenge!</span>
-          <span class="challenge-hint">Answer fast — 6 seconds!</span>
+          <span class="challenge-badge">💀 Second Chance!</span>
+          <span class="challenge-hint">Answer to stay alive — 6 seconds!</span>
         </div>
         <div id="challenge-timer-wrap">
           <div id="challenge-timer-bar" class="challenge-timer-bar"></div>
@@ -97,7 +97,7 @@
         <div id="challenge-choices" class="challenge-choices">
           <!-- buttons injected by JS -->
         </div>
-        <p class="challenge-stakes">✅ Correct: +30 pts + 4s Shield &nbsp; ❌ Wrong: Stunned 3s</p>
+        <p class="challenge-stakes">✅ Correct: You're revived! &nbsp; ❌ Wrong / Timeout: Game Over 💀</p>
       </div>
     </div>
 
@@ -106,7 +106,7 @@
       <div class="about-card">
         <p id="about-kicker">About</p>
         <h2 id="about-title">Snake Arena: Logic Survival</h2>
-        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 arena with wall obstacles and bridge corridors. Eat 5 types of food for power-ups and points. Cross bridges to trigger timed logic challenges — answer correctly for a shield bonus, or get stunned for 3s! Outlast all AI snakes to win.</p>
+        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 open arena. Eat 5 types of food for power-ups and points. When you die, a timed logic challenge appears — answer correctly to revive and keep your score! Outlast all AI snakes to win.</p>
         <p id="about-version-label">Version: <span id="about-version-value"></span></p>
         <button id="close-about" class="secondary-button">Close</button>
       </div>
