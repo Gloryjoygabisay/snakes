@@ -1524,49 +1524,178 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    // Mountain path background (all modes)
-    this.bgGraphics.fillStyle(0x2d5a1b);
-    this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // ── Blue sky (top portion) ────────────────────────────────────────
+    this.bgGraphics.fillStyle(0x3a7fcf);
+    this.bgGraphics.fillRect(0, 0, CANVAS_W, 70);
+    this.bgGraphics.fillStyle(0x5899de);
+    this.bgGraphics.fillRect(0, 70, CANVAS_W, 60);
+    this.bgGraphics.fillStyle(0x87ceeb);
+    this.bgGraphics.fillRect(0, 130, CANVAS_W, 58);
 
-    // Dirt path strip through middle rows
-    this.bgGraphics.fillStyle(0x8b6914, 0.55);
-    this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
-    this.bgGraphics.fillStyle(0xa07840, 0.25);
-    for (let i = 0; i < 20; i++) {
-      this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
-      this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
+    // Clouds
+    const drawCloud = (cx: number, cy: number, sc: number) => {
+      this.bgGraphics.fillStyle(0xffffff, 0.88);
+      this.bgGraphics.fillEllipse(cx, cy, 64 * sc, 28 * sc);
+      this.bgGraphics.fillEllipse(cx - 22 * sc, cy + 7 * sc, 40 * sc, 22 * sc);
+      this.bgGraphics.fillEllipse(cx + 22 * sc, cy + 6 * sc, 44 * sc, 24 * sc);
+      this.bgGraphics.fillEllipse(cx, cy - 10 * sc, 36 * sc, 20 * sc);
+    };
+    drawCloud(100, 32, 0.75);
+    drawCloud(300, 20, 1.0);
+    drawCloud(500, 40, 0.8);
+    drawCloud(190, 58, 0.6);
+    drawCloud(445, 58, 0.7);
+
+    // ── Rolling hills background ──────────────────────────────────────
+    this.bgGraphics.fillStyle(0x3d8030);
+    for (let i = 0; i < 7; i++) {
+      this.bgGraphics.fillEllipse(i * 115 - 20, 170, 190, 82);
     }
-    // Grass tufts
+    this.bgGraphics.fillStyle(0x52a838, 0.45);
+    for (let i = 0; i < 7; i++) {
+      this.bgGraphics.fillEllipse(i * 115 - 30, 158, 120, 45);
+    }
+
+    // ── Green ground (below horizon) ──────────────────────────────────
+    this.bgGraphics.fillStyle(0x2d5a1b);
+    this.bgGraphics.fillRect(0, 185, CANVAS_W, CANVAS_H - 185);
+
+    // ── Background trees (distant silhouette) ─────────────────────────
+    this.bgGraphics.fillStyle(0x1e4a10, 0.8);
+    for (let i = 0; i < 9; i++) {
+      const bx = 50 + i * 70;
+      this.bgGraphics.fillEllipse(bx, 174, 46, 28);
+      this.bgGraphics.fillRect(bx - 3, 180, 6, 20);
+    }
+
+    // Helper: draw a real-looking foreground tree
+    const drawTree = (tx: number, ty: number, sz: number) => {
+      this.bgGraphics.fillStyle(0x5c3317);
+      this.bgGraphics.fillRect(tx - Math.round(4 * sz), ty, Math.round(8 * sz), Math.round(28 * sz));
+      this.bgGraphics.fillStyle(0x7a4a20, 0.45);
+      this.bgGraphics.fillRect(tx - Math.round(4 * sz), ty, Math.round(3 * sz), Math.round(28 * sz));
+      const fc: [number, number, number] = [0x1a5c0a, 0x236e10, 0x2d8a14];
+      for (let l = 0; l < 3; l++) {
+        this.bgGraphics.fillStyle(fc[l]);
+        this.bgGraphics.fillEllipse(
+          tx, ty - Math.round((12 + l * 18) * sz),
+          Math.round((52 - l * 10) * sz), Math.round((34 - l * 6) * sz)
+        );
+      }
+      this.bgGraphics.fillStyle(0x3cb818, 0.3);
+      this.bgGraphics.fillEllipse(tx - Math.round(7 * sz), ty - Math.round(30 * sz), Math.round(20 * sz), Math.round(14 * sz));
+    };
+
+    // Foreground trees — left edge
+    drawTree(18, 310, 1.0);
+    drawTree(46, 278, 0.85);
+    drawTree(20, 358, 1.1);
+    // Foreground trees — right edge
+    drawTree(624, 295, 0.95);
+    drawTree(604, 335, 1.05);
+    drawTree(618, 358, 0.9);
+    // Trees between path bottom and river (both sides)
+    drawTree(28, 390, 0.62);
+    drawTree(50, 378, 0.52);
+    drawTree(612, 382, 0.58);
+    drawTree(594, 374, 0.68);
+
+    // ── Curved winding dirt path ──────────────────────────────────────
+    const numPts = 80;
+    const pathTopPts: { x: number; y: number }[] = [];
+    const pathBotPts: { x: number; y: number }[] = [];
+    for (let i = 0; i <= numPts; i++) {
+      const t = i / numPts;
+      const px = t * CANVAS_W;
+      const wave = Math.sin(t * Math.PI * 2.2) * 18 + Math.sin(t * Math.PI * 0.9 + 0.5) * 10;
+      const midY = 240 + wave;
+      pathTopPts.push({ x: px, y: midY - 40 });
+      pathBotPts.push({ x: px, y: midY + 40 });
+    }
+    const pathPoly = [...pathTopPts, ...[...pathBotPts].reverse()];
+    this.bgGraphics.fillStyle(0x8b6914, 0.85);
+    this.bgGraphics.fillPoints(pathPoly as Phaser.Types.Math.Vector2Like[], true);
+    // Center highlight stripe
+    this.bgGraphics.fillStyle(0xa07840, 0.28);
+    for (let i = 0; i <= numPts; i++) {
+      const t = i / numPts;
+      const px = t * CANVAS_W;
+      const wave = Math.sin(t * Math.PI * 2.2) * 18 + Math.sin(t * Math.PI * 0.9 + 0.5) * 10;
+      this.bgGraphics.fillEllipse(px, 240 + wave, 28, 10);
+    }
+    // Path pebbles
+    this.bgGraphics.fillStyle(0x6b5020, 0.5);
+    for (let i = 0; i < 30; i++) {
+      const t = i * 0.034 + 0.01;
+      const px = t * CANVAS_W;
+      const wave = Math.sin(t * Math.PI * 2.2) * 18 + Math.sin(t * Math.PI * 0.9 + 0.5) * 10;
+      this.bgGraphics.fillCircle(px, 240 + wave + (i % 3 - 1) * 18, 2.5);
+    }
+
+    // ── Grass tufts (avoiding path + river) ──────────────────────────
     this.bgGraphics.fillStyle(0x3d8c28, 0.6);
-    for (let i = 0; i < 40; i++) {
-      const gx = ((i * 47 + 13) % CANVAS_W);
-      const gy = ((i * 31 + 7) % CANVAS_H);
-      if (gy > 195 && gy < 285) continue;
-      if (gy > 420) continue; // skip river area
+    for (let i = 0; i < 35; i++) {
+      const gx = (i * 47 + 13) % CANVAS_W;
+      const gy = 195 + (i * 31 + 7) % 200;
+      if (gy > 420) continue;
+      const waveAtX = Math.sin((gx / CANVAS_W) * Math.PI * 2.2) * 18 + Math.sin((gx / CANVAS_W) * Math.PI * 0.9 + 0.5) * 10;
+      const pathMidAtX = 240 + waveAtX;
+      if (gy > pathMidAtX - 46 && gy < pathMidAtX + 46) continue;
       this.bgGraphics.fillEllipse(gx, gy, 8, 4);
     }
 
-    // ── River at the bottom ──────────────────────────────────
+    // Terrain rocks (decorative, skip river zone)
+    this.bgGraphics.fillStyle(0x6b5744);
+    for (const rock of TERRAIN_ROCKS) {
+      if (rock.y > 422) continue;
+      this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
+    }
+
+    // ── Flowers beside the river / fence ─────────────────────────────
+    const flowerColors = [0xff5a8a, 0xffdd00, 0xff9900, 0xffffff, 0xff4466, 0xcc44ff];
+    const flowerData = [
+      { x: 28, y: 407 }, { x: 68, y: 414 }, { x: 112, y: 406 },
+      { x: 168, y: 412 }, { x: 218, y: 407 }, { x: 265, y: 414 },
+      { x: 312, y: 403 }, { x: 360, y: 412 }, { x: 408, y: 407 },
+      { x: 455, y: 415 }, { x: 500, y: 404 }, { x: 548, y: 411 },
+      { x: 590, y: 406 }, { x: 628, y: 414 },
+      { x: 48, y: 422 }, { x: 138, y: 420 }, { x: 244, y: 423 },
+      { x: 338, y: 419 }, { x: 430, y: 422 }, { x: 520, y: 420 }, { x: 612, y: 421 },
+    ];
+    for (let fi = 0; fi < flowerData.length; fi++) {
+      const fd = flowerData[fi];
+      const fc = flowerColors[fi % flowerColors.length];
+      // Stem
+      this.bgGraphics.fillStyle(0x2d8a1c);
+      this.bgGraphics.fillRect(fd.x - 1, fd.y, 2, 9);
+      // Petals
+      this.bgGraphics.fillStyle(fc, 0.92);
+      this.bgGraphics.fillEllipse(fd.x, fd.y - 2, 9, 5);
+      this.bgGraphics.fillEllipse(fd.x - 3, fd.y + 2, 5, 8);
+      this.bgGraphics.fillEllipse(fd.x + 3, fd.y + 2, 5, 8);
+      // Center
+      this.bgGraphics.fillStyle(0xffff88);
+      this.bgGraphics.fillCircle(fd.x, fd.y + 2, 1.8);
+    }
+
+    // ── River at the bottom ───────────────────────────────────────────
     const riverY = 432;
     const riverH = 48;
-    // River water (animated shimmer via exitPulseTimer for a ripple wave)
     this.bgGraphics.fillStyle(0x1565c0);
     this.bgGraphics.fillRect(0, riverY, CANVAS_W, riverH);
-    // Lighter blue mid-layer
     this.bgGraphics.fillStyle(0x1e88e5, 0.7);
     this.bgGraphics.fillRect(0, riverY + 8, CANVAS_W, riverH - 16);
-    // Ripple highlights (wavy lines across the river)
+    // Animated ripple highlights
     this.bgGraphics.fillStyle(0x64b5f6, 0.45);
     for (let i = 0; i < 12; i++) {
       const wx = (i * 56 + ((this.exitPulseTimer / 8) % 56)) % CANVAS_W;
       this.bgGraphics.fillEllipse(wx, riverY + 16, 40, 5);
       this.bgGraphics.fillEllipse(wx + 28, riverY + 30, 30, 4);
     }
-    // Deep water edge at very bottom
     this.bgGraphics.fillStyle(0x0d47a1, 0.6);
     this.bgGraphics.fillRect(0, riverY + riverH - 8, CANVAS_W, 8);
 
-    // Rocks in the river (blue-grey rounded boulders)
+    // Rocks in the river
     const riverRocks = [
       { x: 45,  y: riverY + 22, rw: 22, rh: 14 },
       { x: 120, y: riverY + 14, rw: 18, rh: 11 },
@@ -1578,44 +1707,25 @@ class VenomArenaScene extends Phaser.Scene {
       { x: 610, y: riverY + 20, rw: 17, rh: 10 },
     ];
     for (const r of riverRocks) {
-      // Shadow
       this.bgGraphics.fillStyle(0x0d47a1, 0.5);
       this.bgGraphics.fillEllipse(r.x + 2, r.y + 3, r.rw, r.rh * 0.6);
-      // Rock body (blue-grey)
       this.bgGraphics.fillStyle(0x4a6fa5);
       this.bgGraphics.fillEllipse(r.x, r.y, r.rw, r.rh);
-      // Highlight
       this.bgGraphics.fillStyle(0x7fa8d8, 0.55);
       this.bgGraphics.fillEllipse(r.x - 3, r.y - 3, r.rw * 0.55, r.rh * 0.5);
     }
 
-    // Fence along the top edge of the river (bottom of the pathway)
+    // Fence along top edge of the river
     this.bgGraphics.fillStyle(0xc8a050);
     for (let fx = 4; fx < CANVAS_W; fx += 22) {
-      // Fence post
       this.bgGraphics.fillRect(fx, riverY - 10, 6, 14);
       this.bgGraphics.fillStyle(0xe8c070);
       this.bgGraphics.fillRect(fx, riverY - 10, 6, 4);
       this.bgGraphics.fillStyle(0xc8a050);
     }
-    // Horizontal fence rail
     this.bgGraphics.fillStyle(0xb08840);
     this.bgGraphics.fillRect(0, riverY - 5, CANVAS_W, 3);
     this.bgGraphics.fillRect(0, riverY - 1, CANVAS_W, 2);
-    this.bgGraphics.fillStyle(0x6b5744);
-    for (const rock of TERRAIN_ROCKS) {
-      this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
-    }
-    this.bgGraphics.fillStyle(0x1c2030, 0.7);
-    for (let i = 0; i < CANVAS_W; i += 22) {
-      this.bgGraphics.fillCircle(i, CANVAS_H / 2, 1.2);
-    }
-    for (let i = 0; i < 28; i++) {
-      this.bgGraphics.fillCircle(i * 24, i * 18, 1.2);
-    }
-    for (let i = 0; i < 20; i++) {
-      this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
-    }
 
     // Walls — bamboo fence for Explorer, stone for Survivor/Legend
     if (gameMode === 'explorer') {
