@@ -68,15 +68,6 @@ aboutPanel?.addEventListener('click', (event) => {
   if (event.target === aboutPanel) closeAbout();
 });
 
-// Direction buttons → dispatch event consumed by the Phaser scene
-document.getElementById('dpad')?.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-dir]');
-  if (btn?.dataset.dir) {
-    window.dispatchEvent(new CustomEvent('snake-dir', { detail: btn.dataset.dir }));
-  }
-});
-
 // Retry button → ask the Phaser scene to restart
 document.getElementById('retry-btn')?.addEventListener('click', () => {
   window.dispatchEvent(new CustomEvent('snake-retry'));

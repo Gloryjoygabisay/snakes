@@ -81,7 +81,7 @@ class SnakeScene extends Phaser.Scene {
   private challengeActive = false;
   private activeChallenge: Challenge | null = null;
   private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
-  private swipeStart: { x: number; y: number } | null = null;
+  private pointerPos: { x: number; y: number } | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private overlayText!: Phaser.GameObjects.Text;
@@ -117,37 +117,15 @@ class SnakeScene extends Phaser.Scene {
     this.keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // Swipe detection: record touch start, determine direction on lift
+    // Finger-chase: track where the finger/cursor is; snake steers toward it each tick
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      this.swipeStart = { x: p.x, y: p.y };
+      this.pointerPos = { x: p.x, y: p.y };
     });
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
-      if (!this.swipeStart) return;
-      const dx = p.x - this.swipeStart.x;
-      const dy = p.y - this.swipeStart.y;
-      this.swipeStart = null;
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
-      if (Math.max(absDx, absDy) < 20) return; // too short to be a swipe
-      const human = this.snakes[0];
-      if (human?.alive) {
-        if (absDx > absDy) {
-          this.queueDirection(human, dx > 0 ? 'RIGHT' : 'LEFT');
-        } else {
-          this.queueDirection(human, dy > 0 ? 'DOWN' : 'UP');
-        }
-      }
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (p.isDown) this.pointerPos = { x: p.x, y: p.y };
     });
-    this.input.on('pointercancel', () => { this.swipeStart = null; });
-
-    // Direction buttons (dispatched by DOM touch controls)
-    const dirHandler = (e: Event) => {
-      const dir = (e as CustomEvent<string>).detail as Direction;
-      const human = this.snakes?.[0];
-      if (human?.alive && !this.challengeActive) this.queueDirection(human, dir);
-    };
-    window.addEventListener('snake-dir', dirHandler);
-    this.domListeners.push({ el: window as unknown as Element, event: 'snake-dir', fn: dirHandler as EventListener });
+    this.input.on('pointerup', () => { this.pointerPos = null; });
+    this.input.on('pointercancel', () => { this.pointerPos = null; });
 
     // Retry button
     const retryHandler = () => { if (this.roundOver) this.resetGame(); };
@@ -655,17 +633,35 @@ class SnakeScene extends Phaser.Scene {
       return;
     }
 
-    // Handle human keyboard input (arrows + WASD)
+    // Handle human input: finger-chase (pointer) + WASD keyboard fallback
     const human = this.snakes[0];
     if (human.alive) {
-      if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.keyD)) {
-        this.queueDirection(human, 'RIGHT');
-      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.keyA)) {
-        this.queueDirection(human, 'LEFT');
-      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.keyW)) {
-        this.queueDirection(human, 'UP');
-      } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.keyS)) {
-        this.queueDirection(human, 'DOWN');
+      if (this.pointerPos) {
+        // Steer toward finger: compare angle from snake head to pointer
+        const head = human.body[0];
+        const hx = head.x * CELL_SIZE + CELL_SIZE / 2;
+        const hy = head.y * CELL_SIZE + CELL_SIZE / 2;
+        const dx = this.pointerPos.x - hx;
+        const dy = this.pointerPos.y - hy;
+        // Only turn if finger is at least one cell away (avoids jitter on tap)
+        if (Math.max(Math.abs(dx), Math.abs(dy)) > CELL_SIZE) {
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            this.queueDirection(human, dx > 0 ? 'RIGHT' : 'LEFT');
+          } else {
+            this.queueDirection(human, dy > 0 ? 'DOWN' : 'UP');
+          }
+        }
+      } else {
+        // Keyboard fallback for desktop
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.keyD)) {
+          this.queueDirection(human, 'RIGHT');
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.keyA)) {
+          this.queueDirection(human, 'LEFT');
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.keyW)) {
+          this.queueDirection(human, 'UP');
+        } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.keyS)) {
+          this.queueDirection(human, 'DOWN');
+        }
       }
     }
 
