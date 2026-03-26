@@ -58,11 +58,38 @@ interface LevelConfig {
   movingWallConfigs: MovingWallConfig[];
   hasBoss: boolean;
   speedRamp: boolean;
+  // Optional: exit-based win instead of survival timer
+  exitZone?: { col: number; row: number };
+  collectibles?: [number, number][];
+  gloryStart?: { col: number; row: number };
 }
 
 const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
   explorer: [
-    { name: 'Basic Movement', survivalGoal: 20, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false, walls: [], poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false },
+    { name: 'Basic Movement', survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+      walls: [
+        // Top bridge wall
+        ...hwall(8,  4, 27), ...hwall(9,  4, 27),
+        // Bottom bridge wall
+        ...hwall(15, 4, 27), ...hwall(16, 4, 27),
+        // Left enclosure (before bridge opens)
+        ...vwall(3,  9, 14),
+        // Right enclosure (before exit)
+        ...vwall(28, 8, 17),
+      ],
+      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+      gloryStart: { col: 1, row: 12 },
+      exitZone:   { col: 29, row: 12 },
+      collectibles: [
+        [6, 10], [6, 14],
+        [9, 11], [9, 13],
+        [12, 10], [12, 14],
+        [15, 11], [15, 13],
+        [18, 10], [18, 14],
+        [21, 11], [21, 13],
+        [24, 10], [24, 14],
+      ],
+    },
     { name: 'Open Fields', survivalGoal: 30, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false, walls: [], poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false },
     { name: 'Fences', survivalGoal: 45, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
       walls: [...hwall(8, 6, 11), ...hwall(8, 13, 18), ...hwall(16, 10, 14), ...hwall(16, 17, 22), ...vwall(24, 4, 9), ...vwall(8, 14, 20)],
@@ -263,6 +290,11 @@ class VenomArenaScene extends Phaser.Scene {
   private readonly CHALLENGE_DURATION_MS = 10000;
   private tongueTimer = 0;
 
+  // Exit-zone + collectible system
+  private exitZone: { col: number; row: number } | null = null;
+  private collectibles: Array<{ col: number; row: number; collected: boolean }> = [];
+  private exitPulseTimer = 0;
+
   constructor() {
     super({ key: 'VenomArenaScene' });
   }
@@ -298,8 +330,12 @@ class VenomArenaScene extends Phaser.Scene {
     const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
 
     this.glory = {
-      x: CANVAS_W / 2,
-      y: CANVAS_H / 2,
+      x: config.gloryStart
+        ? config.gloryStart.col * CELL_SIZE + CELL_SIZE / 2
+        : CANVAS_W / 2,
+      y: config.gloryStart
+        ? config.gloryStart.row * CELL_SIZE + CELL_SIZE / 2
+        : CANVAS_H / 2,
       speed: config.glorySpeed,
       lives: config.lives,
       invincibleMs: 0,
@@ -354,6 +390,11 @@ class VenomArenaScene extends Phaser.Scene {
     this.challengeActive = false;
     this.pendingIQGate = null;
     this.challengeTimerMs = 0;
+
+    // Exit zone + collectibles
+    this.exitZone = config.exitZone ?? null;
+    this.collectibles = (config.collectibles ?? []).map(([col, row]) => ({ col, row, collected: false }));
+    this.exitPulseTimer = 0;
 
     this.survivalMs = 0;
     this.score = 0;
@@ -664,9 +705,27 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
-    // Check win
+    // Exit pulse animation
+    this.exitPulseTimer += delta;
+
+    // Collect items Glory walks over
+    const gc2 = this.gloryCell();
+    for (const c of this.collectibles) {
+      if (!c.collected && c.col === gc2.x && c.row === gc2.y) {
+        c.collected = true;
+        this.score += 10;
+      }
+    }
+
+    // Exit zone check — reach exit to win
+    if (this.exitZone && gc2.x === this.exitZone.col && gc2.y === this.exitZone.row) {
+      this.winGame();
+      return;
+    }
+
+    // Check win (survival timer — skip if level uses exit zone)
     const goal = config.survivalGoal;
-    if (this.survivalMs >= goal * 1000) {
+    if (!this.exitZone && this.survivalMs >= goal * 1000) {
       this.winGame();
       return;
     }
@@ -843,6 +902,8 @@ class VenomArenaScene extends Phaser.Scene {
     this.overlayGraphics.clear();
 
     this.drawBackground();
+    this.drawCollectibles();
+    this.drawExitZone();
     this.drawPoisonTiles();
     this.drawIQGates();
     this.drawSnakes();
@@ -877,6 +938,49 @@ class VenomArenaScene extends Phaser.Scene {
     }
   }
 
+  private drawCollectibles(): void {
+    for (const c of this.collectibles) {
+      if (c.collected) continue;
+      const cx = c.col * CELL_SIZE + CELL_SIZE / 2;
+      const cy = c.row * CELL_SIZE + CELL_SIZE / 2;
+      // Apple: red circle + green leaf
+      this.bgGraphics.fillStyle(0xdd2222);
+      this.bgGraphics.fillCircle(cx, cy + 1, 6);
+      this.bgGraphics.fillStyle(0x44aa22);
+      this.bgGraphics.fillEllipse(cx + 3, cy - 5, 7, 4);
+      // Stem
+      this.bgGraphics.fillStyle(0x664422);
+      this.bgGraphics.fillRect(cx - 0.5, cy - 7, 1, 4);
+      // Shine
+      this.bgGraphics.fillStyle(0xffffff, 0.5);
+      this.bgGraphics.fillCircle(cx - 2, cy - 1, 2);
+    }
+  }
+
+  private drawExitZone(): void {
+    if (!this.exitZone) return;
+    const cx = this.exitZone.col * CELL_SIZE + CELL_SIZE / 2;
+    const cy = this.exitZone.row * CELL_SIZE + CELL_SIZE / 2;
+    const pulse = 0.55 + 0.45 * Math.sin(this.exitPulseTimer / 350);
+    // Outer glow ring
+    this.bgGraphics.fillStyle(0x00ff88, 0.15 * pulse);
+    this.bgGraphics.fillCircle(cx, cy, 22);
+    // Mid ring
+    this.bgGraphics.fillStyle(0x00ff88, 0.35 * pulse);
+    this.bgGraphics.fillCircle(cx, cy, 14);
+    // Core
+    this.bgGraphics.fillStyle(0x00ffaa, 0.85 * pulse);
+    this.bgGraphics.fillCircle(cx, cy, 8);
+    // Portal swirl dots
+    for (let i = 0; i < 6; i++) {
+      const angle = (this.exitPulseTimer / 600) + (i / 6) * Math.PI * 2;
+      const sx = cx + Math.cos(angle) * 11;
+      const sy = cy + Math.sin(angle) * 11;
+      this.bgGraphics.fillStyle(0xffffff, 0.7 * pulse);
+      this.bgGraphics.fillCircle(sx, sy, 2);
+    }
+  }
+
   private drawBackground(): void {
     this.bgGraphics.fillStyle(0x060810);
     this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -897,16 +1001,40 @@ class VenomArenaScene extends Phaser.Scene {
       this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
     }
 
-    // Draw walls
-    this.bgGraphics.fillStyle(0x334455);
-    for (const key of this.walls) {
-      const [col, row] = key.split(',').map(Number);
-      this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-    }
-    this.bgGraphics.lineStyle(1, 0x4466aa, 0.5);
-    for (const key of this.walls) {
-      const [col, row] = key.split(',').map(Number);
-      this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    // Draw walls — use brown plank style if level has an exit zone (bridge level)
+    const isBridgeLevel = !!this.exitZone;
+    if (isBridgeLevel) {
+      // Brown wooden planks
+      this.bgGraphics.fillStyle(0x7a4a1a);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      }
+      // Plank grain lines
+      this.bgGraphics.lineStyle(1, 0x5a3210, 0.7);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        // Horizontal grain
+        this.bgGraphics.strokeRect(col * CELL_SIZE + 2, row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE - 4, 0);
+      }
+      // Lighter top edge highlight
+      this.bgGraphics.fillStyle(0xc8823a, 0.35);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
+      }
+    } else {
+      this.bgGraphics.fillStyle(0x334455);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      }
+      this.bgGraphics.lineStyle(1, 0x4466aa, 0.5);
+      for (const key of this.walls) {
+        const [col, row] = key.split(',').map(Number);
+        this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      }
     }
   }
 
