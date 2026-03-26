@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import type { ThreeEffects } from './three-effects';
 
 export interface GameController { destroy(): void; }
 
@@ -630,6 +631,7 @@ const TERRAIN_ROCKS: Array<{ x: number; y: number; rw: number; rh: number }> = [
 class VenomArenaScene extends Phaser.Scene {
   private glory!: GloryState;
   private snakes: SnakeEnemy[] = [];
+  private threeEffects: ThreeEffects | null = null;
 
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
@@ -710,6 +712,13 @@ class VenomArenaScene extends Phaser.Scene {
     if (susieBubble) susieBubble.classList.add('hidden');
 
     this.updateDOM();
+
+    const container = document.getElementById('game-root');
+    if (container) {
+      import('./three-effects').then(({ createThreeEffects }) => {
+        this.threeEffects = createThreeEffects(container, CANVAS_W, CANVAS_H);
+      }).catch(() => { /* Three.js optional */ });
+    }
   }
 
   private initGame(): void {
@@ -1149,6 +1158,7 @@ class VenomArenaScene extends Phaser.Scene {
       if (!c.collected && c.col === gc2.x && c.row === gc2.y) {
         c.collected = true;
         this.score += 10;
+        this.threeEffects?.triggerEvent('food', c.col * CELL_SIZE + CELL_SIZE / 2, c.row * CELL_SIZE + CELL_SIZE / 2);
       }
     }
 
@@ -1169,6 +1179,23 @@ class VenomArenaScene extends Phaser.Scene {
 
     this.updateDOM();
     this.drawScene();
+
+    if (this.threeEffects && !this.roundOver) {
+      this.threeEffects.update({
+        snakeHeads: this.snakes.map(s => ({
+          x: s.segments[0].x * CELL_SIZE + CELL_SIZE / 2,
+          y: s.segments[0].y * CELL_SIZE + CELL_SIZE / 2,
+          color: s.color,
+        })),
+        foodPositions: this.collectibles
+          .filter(c => !c.collected)
+          .map(c => ({ x: c.col * CELL_SIZE + CELL_SIZE / 2, y: c.row * CELL_SIZE + CELL_SIZE / 2 })),
+        exitZone: this.exitZone
+          ? { x: this.exitZone.col * CELL_SIZE + CELL_SIZE / 2, y: this.exitZone.row * CELL_SIZE + CELL_SIZE / 2 }
+          : null,
+        elapsed: this.survivalMs,
+      });
+    }
   }
 
   private checkCollision(): void {
@@ -1756,6 +1783,7 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private gameOver(): void {
+    this.threeEffects?.triggerEvent('death', this.glory.x, this.glory.y);
     this.showEndOverlay(`💀 Game Over!\nScore: ${this.score}`, false);
   }
 
@@ -1763,6 +1791,7 @@ class VenomArenaScene extends Phaser.Scene {
     const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
     this.score = Math.floor((this.survivalMs / 1000) * config.scoreMultiplier);
     this.updateDOM();
+    this.threeEffects?.triggerEvent('win', CANVAS_W / 2, CANVAS_H / 2);
     window.dispatchEvent(new CustomEvent('snake-level-complete', { detail: { mode: gameMode, level: gameLevel } }));
     this.showEndOverlay(`🏆 You Survived!\nScore: ${this.score}`, true);
   }
@@ -1779,6 +1808,8 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    this.threeEffects?.destroy();
+    this.threeEffects = null;
     this.snakeTickTimer?.remove();
     if (this.powerUpOfferTimeout) {
       clearTimeout(this.powerUpOfferTimeout);
