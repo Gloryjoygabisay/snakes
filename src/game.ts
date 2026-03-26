@@ -640,14 +640,13 @@ class VenomArenaScene extends Phaser.Scene {
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private topGraphics!: Phaser.GameObjects.Graphics;
-  private explorerBgImage: Phaser.GameObjects.Image | null = null;
 
   private overlayText!: Phaser.GameObjects.Text;
 
   private joystickActive = false;
   private dragDir: { dx: number; dy: number } | null = null;
   private gloryTrail: Array<{x: number; y: number}> = [];
-  private readonly TRAIL_LENGTH = 6;
+  private gloryTrailMax = 2;  // starts small, grows as apples are eaten
 
   private snakeTickTimer: Phaser.Time.TimerEvent | null = null;
 
@@ -696,21 +695,10 @@ class VenomArenaScene extends Phaser.Scene {
     super({ key: 'VenomArenaScene' });
   }
 
-  preload(): void {
-    this.load.image('explorer-bg', 'explorer-bg.png');
-  }
-
   create(): void {
     this.bgGraphics     = this.add.graphics();
     this.overlayGraphics = this.add.graphics();
     this.topGraphics    = this.add.graphics();
-
-    // Explorer mode: use the mountain path background image
-    if (gameMode === 'explorer' && this.textures.exists('explorer-bg')) {
-      this.explorerBgImage = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'explorer-bg')
-        .setDisplaySize(CANVAS_W, CANVAS_H)
-        .setDepth(-1);
-    }
 
     this.overlayText = this.add.text(CANVAS_W / 2, CANVAS_H / 2, '', {
       fontSize: '30px',
@@ -756,6 +744,7 @@ class VenomArenaScene extends Phaser.Scene {
       invincibleMs: 0,
     };
     this.gloryTrail = [];
+    this.gloryTrailMax = 2;  // reset to tiny at start of each level
 
     this.snakes = [];
     for (let i = 0; i < config.snakeCount; i++) {
@@ -1113,7 +1102,7 @@ class VenomArenaScene extends Phaser.Scene {
     const gloryRow = Math.max(0, Math.min(ROWS - 1, Math.floor(this.glory.y / CELL_SIZE)));
     this.hiddenInBush = this.bushCells.has(`${gloryCol},${gloryRow}`);
     this.gloryTrail.unshift({ x: this.glory.x, y: this.glory.y });
-    if (this.gloryTrail.length > this.TRAIL_LENGTH) this.gloryTrail.pop();
+    if (this.gloryTrail.length > this.gloryTrailMax) this.gloryTrail.pop();
 
     // Collision check
     if (this.glory.invincibleMs <= 0) {
@@ -1200,6 +1189,7 @@ class VenomArenaScene extends Phaser.Scene {
       if (!c.collected && c.col === gc2.x && c.row === gc2.y) {
         c.collected = true;
         this.score += 10;
+        this.gloryTrailMax = Math.min(24, this.gloryTrailMax + 3); // grow snake!
         this.threeEffects?.triggerEvent('food', c.col * CELL_SIZE + CELL_SIZE / 2, c.row * CELL_SIZE + CELL_SIZE / 2);
       }
     }
@@ -1531,63 +1521,54 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    const isExplorer = gameMode === 'explorer' && this.explorerBgImage !== null;
+    // Mountain path background (all modes)
+    this.bgGraphics.fillStyle(0x2d5a1b);
+    this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    if (!isExplorer) {
-      // Non-explorer: full programmatic mountain background
-      this.bgGraphics.fillStyle(0x2d5a1b);
-      this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-      // Dirt path strip through middle rows (y=200 to y=280)
-      this.bgGraphics.fillStyle(0x8b6914, 0.55);
-      this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
-      this.bgGraphics.fillStyle(0xa07840, 0.25);
-      for (let i = 0; i < 20; i++) {
-        this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
-        this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
-      }
-      // Grass tufts
-      this.bgGraphics.fillStyle(0x3d8c28, 0.6);
-      for (let i = 0; i < 40; i++) {
-        const gx = ((i * 47 + 13) % CANVAS_W);
-        const gy = ((i * 31 + 7) % CANVAS_H);
-        if (gy > 195 && gy < 285) continue;
-        this.bgGraphics.fillEllipse(gx, gy, 8, 4);
-      }
-      this.bgGraphics.fillStyle(0x6b5744);
-      for (const rock of TERRAIN_ROCKS) {
-        this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
-      }
-      this.bgGraphics.fillStyle(0x1c2030, 0.7);
-      for (let i = 0; i < CANVAS_W; i += 22) {
-        this.bgGraphics.fillCircle(i, CANVAS_H / 2, 1.2);
-      }
-      for (let i = 0; i < 28; i++) {
-        this.bgGraphics.fillCircle(i * 24, i * 18, 1.2);
-      }
-      for (let i = 0; i < 20; i++) {
-        this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
-      }
+    // Dirt path strip through middle rows
+    this.bgGraphics.fillStyle(0x8b6914, 0.55);
+    this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
+    this.bgGraphics.fillStyle(0xa07840, 0.25);
+    for (let i = 0; i < 20; i++) {
+      this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
+      this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
+    }
+    // Grass tufts
+    this.bgGraphics.fillStyle(0x3d8c28, 0.6);
+    for (let i = 0; i < 40; i++) {
+      const gx = ((i * 47 + 13) % CANVAS_W);
+      const gy = ((i * 31 + 7) % CANVAS_H);
+      if (gy > 195 && gy < 285) continue;
+      this.bgGraphics.fillEllipse(gx, gy, 8, 4);
+    }
+    this.bgGraphics.fillStyle(0x6b5744);
+    for (const rock of TERRAIN_ROCKS) {
+      this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
+    }
+    this.bgGraphics.fillStyle(0x1c2030, 0.7);
+    for (let i = 0; i < CANVAS_W; i += 22) {
+      this.bgGraphics.fillCircle(i, CANVAS_H / 2, 1.2);
+    }
+    for (let i = 0; i < 28; i++) {
+      this.bgGraphics.fillCircle(i * 24, i * 18, 1.2);
+    }
+    for (let i = 0; i < 20; i++) {
+      this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
     }
 
-    // Draw walls
-    if (isExplorer) {
-      // Bamboo fence style to match the mountain path image
+    // Walls — bamboo fence for Explorer, stone for Survivor/Legend
+    if (gameMode === 'explorer') {
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         const px = col * CELL_SIZE;
         const py = row * CELL_SIZE;
-        // Bamboo post (rounded tan rectangle)
         this.bgGraphics.fillStyle(0xc8a050);
         this.bgGraphics.fillRect(px + 3, py + 1, CELL_SIZE - 6, CELL_SIZE - 2);
-        // Post top cap (lighter)
         this.bgGraphics.fillStyle(0xe8c070);
         this.bgGraphics.fillRect(px + 3, py + 1, CELL_SIZE - 6, 4);
-        // Post shadow sides
         this.bgGraphics.fillStyle(0x8b6020, 0.5);
         this.bgGraphics.fillRect(px + 3, py + 1, 3, CELL_SIZE - 2);
         this.bgGraphics.fillRect(px + CELL_SIZE - 6, py + 1, 3, CELL_SIZE - 2);
-        // Horizontal rail line
         this.bgGraphics.lineStyle(1.5, 0xa07838, 0.8);
         this.bgGraphics.strokeRect(px + 3, py + CELL_SIZE / 2, CELL_SIZE - 6, 0);
       }
@@ -1838,10 +1819,10 @@ class VenomArenaScene extends Phaser.Scene {
     const eyeColor   = 0xff4400;
 
     // Draw body segments from tail to neck (so head is on top)
-    const totalSegs = Math.min(trail.length, this.TRAIL_LENGTH);
+    const totalSegs = Math.min(trail.length, this.gloryTrailMax);
     for (let i = totalSegs - 1; i >= 1; i--) {
       const seg = trail[i];
-      const t = i / this.TRAIL_LENGTH;
+      const t = i / this.gloryTrailMax;
       const radius = 10 * (1 - t * 0.5);
 
       this.topGraphics.fillStyle(bodyColor, alpha * (1 - t * 0.3));
@@ -1860,7 +1841,7 @@ class VenomArenaScene extends Phaser.Scene {
     for (let i = 0; i < totalSegs - 1; i++) {
       const a = trail[i];
       const b = trail[i + 1];
-      const t = i / this.TRAIL_LENGTH;
+      const t = i / this.gloryTrailMax;
       const r = 9 * (1 - t * 0.5);
       const mx = (a.x + b.x) / 2;
       const my = (a.y + b.y) / 2;
@@ -2032,8 +2013,6 @@ class VenomArenaScene extends Phaser.Scene {
   shutdown(): void {
     this.threeEffects?.destroy();
     this.threeEffects = null;
-    this.explorerBgImage?.destroy();
-    this.explorerBgImage = null;
     this.snakeTickTimer?.remove();
     if (this.powerUpOfferTimeout) {
       clearTimeout(this.powerUpOfferTimeout);
