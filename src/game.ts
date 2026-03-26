@@ -117,17 +117,18 @@ class SnakeScene extends Phaser.Scene {
     this.keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    // Swipe / drag-steering on the canvas
+    // Swipe detection: record touch start, determine direction on lift
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       this.swipeStart = { x: p.x, y: p.y };
     });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!this.swipeStart || !p.isDown) return;
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => {
+      if (!this.swipeStart) return;
       const dx = p.x - this.swipeStart.x;
       const dy = p.y - this.swipeStart.y;
+      this.swipeStart = null;
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-      if (Math.max(absDx, absDy) < 20) return;
+      if (Math.max(absDx, absDy) < 20) return; // too short to be a swipe
       const human = this.snakes[0];
       if (human?.alive) {
         if (absDx > absDy) {
@@ -136,25 +137,8 @@ class SnakeScene extends Phaser.Scene {
           this.queueDirection(human, dy > 0 ? 'DOWN' : 'UP');
         }
       }
-      // Reset origin so continuous dragging steers continuously
-      this.swipeStart = { x: p.x, y: p.y };
     });
-    this.input.on('pointerup', () => { this.swipeStart = null; });
-
-    // D-pad / external direction events dispatched by DOM buttons
-    const dpadHandler = (e: Event) => {
-      const dir = (e as CustomEvent<string>).detail as Direction;
-      const human = this.snakes?.[0];
-      if (human?.alive && !this.challengeActive) {
-        this.queueDirection(human, dir);
-      }
-    };
-    window.addEventListener('snake-dir', dpadHandler);
-    this.domListeners.push({
-      el: window as unknown as Element,
-      event: 'snake-dir',
-      fn: dpadHandler as EventListener,
-    });
+    this.input.on('pointercancel', () => { this.swipeStart = null; });
 
     this.resetGame();
   }

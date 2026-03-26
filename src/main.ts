@@ -68,13 +68,4 @@ aboutPanel?.addEventListener('click', (event) => {
   if (event.target === aboutPanel) closeAbout();
 });
 
-// D-pad: dispatch direction events for the Phaser scene to consume
-document.getElementById('dpad')?.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-dir]');
-  if (btn?.dataset.dir) {
-    window.dispatchEvent(new CustomEvent('snake-dir', { detail: btn.dataset.dir }));
-  }
-});
-
 setVersionText();
