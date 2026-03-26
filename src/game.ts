@@ -127,12 +127,14 @@ class SnakeScene extends Phaser.Scene {
     this.input.on('pointerup', () => { this.pointerPos = null; });
     this.input.on('pointercancel', () => { this.pointerPos = null; });
 
-    // Retry button
+    this.resetGame();
+
+    // Retry listener persists across rounds — set up AFTER resetGame() so it isn't cleared
     const retryHandler = () => { if (this.roundOver) this.resetGame(); };
     window.addEventListener('snake-retry', retryHandler);
-    this.domListeners.push({ el: window as unknown as Element, event: 'snake-retry', fn: retryHandler as EventListener });
-
-    this.resetGame();
+    // Clean up when Phaser scene shuts down
+    this.events.once('shutdown', () => window.removeEventListener('snake-retry', retryHandler));
+    this.events.once('destroy',  () => window.removeEventListener('snake-retry', retryHandler));
   }
 
   private resetGame(): void {
