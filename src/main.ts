@@ -16,7 +16,7 @@ let bgAnim: { stop: () => void; setColors: (b: string, h: string) => void } | nu
 let selectedBodyColor = 0xe74c3c;
 let selectedHeadColor = 0xff6b6b;
 let selectedMode: GameMode = 'explorer';
-let selectedLevel: 1 | 2 | 3 = 1;
+let selectedLevel: number = 1;
 
 // ── DOM refs ──────────────────────────────────────────────────
 const startScreen  = document.getElementById('start-screen');
@@ -74,6 +74,27 @@ const MODE_META: Record<GameMode, {
   },
 };
 
+const LEVEL_NAMES: Record<GameMode, string[]> = {
+  explorer: ['Basic Movement', 'Open Fields', 'Fences', 'First Maze', 'Mini Challenge'],
+  survivor: ['Intro Survival', 'Narrow Paths', 'Bamboo Bridge', 'Split Path', 'First Hunter', 'Dark Forest', 'Speed + Obstacles', 'Maze Survival', 'Multiple Enemies', 'Boss Stage'],
+  legend: ['Fast Start', 'Tight Corridor', 'Double Chase', 'IQ Gate Traps', 'Maze + Blind', 'Speed Ramp', 'Poison Zones', 'Multi Traps', 'Vision + Enemies', 'Mini Boss', 'Moving Obstacles', 'High-Speed Chase', 'IQ + Move Combo', 'No Safe Zones', 'FINAL VENOM ARENA'],
+};
+
+function getProgress(mode: GameMode): number[] {
+  try { return JSON.parse(localStorage.getItem(`venom_progress_${mode}`) ?? '[]') as number[]; }
+  catch { return []; }
+}
+function saveProgress(mode: GameMode, level: number): void {
+  const p = getProgress(mode);
+  if (!p.includes(level)) { p.push(level); localStorage.setItem(`venom_progress_${mode}`, JSON.stringify(p)); }
+}
+function isLevelUnlocked(mode: GameMode, level: number): boolean {
+  if (mode === 'explorer' && level === 1) return true;
+  if (mode === 'survivor' && level === 1) return getProgress('explorer').includes(5);
+  if (mode === 'legend' && level === 1) return getProgress('survivor').includes(10);
+  return getProgress(mode).includes(level - 1);
+}
+
 // ── Navigation helpers ────────────────────────────────────────
 function showModeSelect(): void {
   levelScreen?.classList.add('hidden');
@@ -89,16 +110,32 @@ function showLevelScreen(mode: GameMode): void {
   setText('level-mode-title',   meta.title);
   setText('level-mode-tagline', meta.tagline);
 
-  meta.levels.forEach((lv, i) => {
-    setText(`lvl${i + 1}-name`,  lv.name);
-    setText(`lvl${i + 1}-speed`, lv.speed);
-  });
+  const levelCards = document.getElementById('level-cards')!;
+  levelCards.innerHTML = '';
+  const levelCount = { explorer: 5, survivor: 10, legend: 15 }[mode];
+  for (let i = 1; i <= levelCount; i++) {
+    const lvl = i;
+    const unlocked = isLevelUnlocked(mode, lvl);
+    const div = document.createElement('div');
+    div.className = `level-select-card${unlocked ? '' : ' locked'}`;
+    div.dataset.level = String(lvl);
+    div.innerHTML = `
+      <span class="lvl-num">Lv ${lvl}</span>
+      <span class="lvl-name">${LEVEL_NAMES[mode][lvl - 1]}</span>
+      <span class="lvl-lock">${unlocked ? '' : '🔒'}</span>
+    `;
+    if (unlocked) {
+      div.addEventListener('click', () => {
+        selectedLevel = lvl;
+        void startGame();
+      });
+    }
+    levelCards.appendChild(div);
+  }
 
   levelScreen?.setAttribute('data-mode', mode);
-
   startScreen?.classList.add('hidden');
   levelScreen?.classList.remove('hidden');
-
   const lvlCanvas = document.getElementById('level-bg-canvas') as HTMLCanvasElement | null;
   if (lvlCanvas && !bgAnim) bgAnim = startBgAnimation(lvlCanvas);
 }
@@ -145,12 +182,12 @@ document.getElementById('mode-select')?.addEventListener('click', (e) => {
 // Back button on level screen
 document.getElementById('back-to-modes')?.addEventListener('click', showModeSelect);
 
-// Level card → start game
-document.getElementById('level-cards')?.addEventListener('click', (e) => {
-  const card = (e.target as HTMLElement).closest<HTMLElement>('.level-select-card');
-  if (!card || !card.dataset.level) return;
-  selectedLevel = parseInt(card.dataset.level) as 1 | 2 | 3;
-  void startGame();
+// Level card clicks are set up per-card in showLevelScreen()
+
+// Level-complete handler
+window.addEventListener('snake-level-complete', (e: Event) => {
+  const { mode, level } = (e as CustomEvent<{ mode: GameMode; level: number }>).detail;
+  saveProgress(mode, level);
 });
 
 // Menu button in game shell → back to mode select (destroys game)
