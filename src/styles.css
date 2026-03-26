@@ -136,11 +136,12 @@ button:disabled {
 #game-shell {
   flex: 1;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto;
   grid-template-columns: 1fr auto;
   grid-template-areas:
     "topbar topbar"
-    "game   panel";
+    "game   panel"
+    "dpad   panel";
   gap: 0;
   min-height: 100vh;
 }
@@ -335,7 +336,70 @@ kbd {
 }
 
 /* ============================================================
-   Touch controls
+   D-pad joystick
+   ============================================================ */
+#dpad {
+  grid-area: dpad;
+  display: grid;
+  grid-template-areas:
+    ".    up    ."
+    "left .     right"
+    ".    down  .";
+  grid-template-columns: repeat(3, 72px);
+  grid-template-rows: repeat(3, 72px);
+  gap: 6px;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  background: var(--bg);
+  border-top: 1px solid var(--surface2);
+}
+
+.dpad-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  background: var(--surface2);
+  border: 2px solid rgba(78, 204, 163, 0.25);
+  color: var(--accent);
+  font-size: 1.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.dpad-btn:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.dpad-btn:active {
+  background: var(--accent-dark);
+  border-color: var(--accent);
+  transform: scale(0.9);
+}
+
+.dpad-up    { grid-area: up; }
+.dpad-down  { grid-area: down; }
+.dpad-left  { grid-area: left; }
+.dpad-right { grid-area: right; }
+
+.dpad-center {
+  grid-area: .;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface2);
+  justify-self: center;
+  align-self: center;
+}
+
+/* ============================================================
+   Touch controls (legacy class kept for compat)
    ============================================================ */
 .touch-controls {
   display: none;
@@ -379,6 +443,7 @@ kbd {
     grid-template-areas:
       "topbar"
       "game"
+      "dpad"
       "panel";
   }
 

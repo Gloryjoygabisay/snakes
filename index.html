@@ -31,6 +31,15 @@
 
       <div id="game-root"></div>
 
+      <!-- On-screen D-pad joystick -->
+      <div id="dpad">
+        <button class="dpad-btn dpad-up" data-dir="UP">▲</button>
+        <button class="dpad-btn dpad-left" data-dir="LEFT">◀</button>
+        <div class="dpad-center"></div>
+        <button class="dpad-btn dpad-right" data-dir="RIGHT">▶</button>
+        <button class="dpad-btn dpad-down" data-dir="DOWN">▼</button>
+      </div>
+
       <div class="panel">
 
         <!-- Power-up HUD -->
@@ -45,7 +54,7 @@
           <h2>Scores</h2>
           <div class="player-score human-color">
             <span class="player-label">🎮 You</span>
-            <span class="player-keys">↑ ↓ ← → / WASD</span>
+            <span class="player-keys">Swipe / D-Pad / WASD</span>
             <strong id="p1-score">0</strong>
           </div>
           <div class="player-score ai1-color">
@@ -76,7 +85,7 @@
         <div class="instructions-card">
           <h2>How to Play</h2>
           <p>When your snake dies, a logic challenge pops up. Answer correctly to revive and keep playing! Answer wrong or run out of time and it's game over.</p>
-          <p>Eat power foods, outlast 3 AI snakes, survive!</p>
+          <p>Swipe on the canvas, tap the D-pad, or use <kbd>WASD</kbd> to steer.</p>
           <p><kbd>Space</kbd> to restart after game over.</p>
         </div>
 

@@ -81,6 +81,7 @@ class SnakeScene extends Phaser.Scene {
   private challengeActive = false;
   private activeChallenge: Challenge | null = null;
   private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private swipeStart: { x: number; y: number } | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private overlayText!: Phaser.GameObjects.Text;
@@ -115,6 +116,45 @@ class SnakeScene extends Phaser.Scene {
     this.keyS = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.S);
     this.keyD = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
     this.spaceKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+    // Swipe / drag-steering on the canvas
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      this.swipeStart = { x: p.x, y: p.y };
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (!this.swipeStart || !p.isDown) return;
+      const dx = p.x - this.swipeStart.x;
+      const dy = p.y - this.swipeStart.y;
+      const absDx = Math.abs(dx);
+      const absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < 20) return;
+      const human = this.snakes[0];
+      if (human?.alive) {
+        if (absDx > absDy) {
+          this.queueDirection(human, dx > 0 ? 'RIGHT' : 'LEFT');
+        } else {
+          this.queueDirection(human, dy > 0 ? 'DOWN' : 'UP');
+        }
+      }
+      // Reset origin so continuous dragging steers continuously
+      this.swipeStart = { x: p.x, y: p.y };
+    });
+    this.input.on('pointerup', () => { this.swipeStart = null; });
+
+    // D-pad / external direction events dispatched by DOM buttons
+    const dpadHandler = (e: Event) => {
+      const dir = (e as CustomEvent<string>).detail as Direction;
+      const human = this.snakes?.[0];
+      if (human?.alive && !this.challengeActive) {
+        this.queueDirection(human, dir);
+      }
+    };
+    window.addEventListener('snake-dir', dpadHandler);
+    this.domListeners.push({
+      el: window as unknown as Element,
+      event: 'snake-dir',
+      fn: dpadHandler as EventListener,
+    });
 
     this.resetGame();
   }
