@@ -261,6 +261,7 @@ class VenomArenaScene extends Phaser.Scene {
   private pendingIQGate: { col: number; row: number; open: boolean; challenge: Challenge } | null = null;
   private challengeTimerMs = 0;
   private readonly CHALLENGE_DURATION_MS = 10000;
+  private tongueTimer = 0;
 
   constructor() {
     super({ key: 'VenomArenaScene' });
@@ -532,6 +533,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.roundOver) return;
+    this.tongueTimer += delta;
 
     // Handle active challenge (IQ gate)
     if (this.challengeActive) {
@@ -950,47 +952,152 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawSnakes(): void {
+    const tongueOut = (this.tongueTimer % 700) < 260;
+
     for (const snake of this.snakes) {
       if (!snake.alive) continue;
       const stunned = snake.stunnedMs > 0;
-      const alpha = stunned ? 0.45 : 1.0;
-      const bodyAlpha = stunned ? 0.3 : 0.75;
-      const headRadius = snake.isBoss ? 14 : 9;
-      const bodyRadius = snake.isBoss ? 10 : 7;
+      const alpha   = stunned ? 0.4 : 1.0;
+      const segs    = snake.segments;
+      const n       = segs.length;
+      const maxBodyR = snake.isBoss ? 10 : 7;
+      const headR    = snake.isBoss ? 14 : 9;
 
-      for (let i = snake.segments.length - 1; i >= 0; i--) {
-        const seg = snake.segments[i];
-        const px = seg.x * CELL_SIZE + CELL_SIZE / 2;
-        const py = seg.y * CELL_SIZE + CELL_SIZE / 2;
+      // Head direction vector (from neck to head)
+      let dx = 0, dy = 0;
+      if (n > 1) {
+        dx = segs[0].x - segs[1].x;
+        dy = segs[0].y - segs[1].y;
+        const mag = Math.sqrt(dx * dx + dy * dy) || 1;
+        dx /= mag; dy /= mag;
+      }
+      // Perpendicular (for eye placement)
+      const px2 = -dy, py2 = dx;
 
-        if (i === 0) {
-          // Head
-          if (snake.isBoss) {
-            // Boss: gold outline
-            this.bgGraphics.fillStyle(0xffaa00, alpha);
-            this.bgGraphics.fillCircle(px, py, headRadius + 3);
-          }
-          this.bgGraphics.fillStyle(snake.color, alpha);
-          this.bgGraphics.fillCircle(px, py, headRadius);
-          // Eyes
-          this.bgGraphics.fillStyle(0xffffff, alpha);
-          this.bgGraphics.fillCircle(px - 3, py - 2, 2);
-          this.bgGraphics.fillCircle(px + 3, py - 2, 2);
-          this.bgGraphics.fillStyle(0x111111, alpha);
-          this.bgGraphics.fillCircle(px - 2.5, py - 2, 1.2);
-          this.bgGraphics.fillCircle(px + 3.5, py - 2, 1.2);
-          if (stunned) {
-            this.bgGraphics.fillStyle(0xffff00, 0.8);
-            this.bgGraphics.fillCircle(px, py - 14, 3);
-            this.bgGraphics.fillCircle(px - 8, py - 10, 2);
-            this.bgGraphics.fillCircle(px + 8, py - 10, 2);
-          }
-        } else {
-          this.bgGraphics.fillStyle(snake.color, i % 2 === 0 ? alpha : bodyAlpha);
-          this.bgGraphics.fillCircle(px, py, bodyRadius);
+      // ── Body (tail → neck, drawn back-to-front) ──────────────
+      for (let i = n - 1; i >= 1; i--) {
+        const seg = segs[i];
+        const cx = seg.x * CELL_SIZE + CELL_SIZE / 2;
+        const cy = seg.y * CELL_SIZE + CELL_SIZE / 2;
+
+        // Taper: thinner toward tail (i=n-1 is tip)
+        const t = 1 - (i / (n - 1)) * 0.6;   // 1.0 at neck, 0.4 at tail
+        const r = maxBodyR * t;
+
+        // Connect to next segment with a filled quad to avoid gaps
+        if (i < n - 1) {
+          const next = segs[i + 1];
+          const nx = next.x * CELL_SIZE + CELL_SIZE / 2;
+          const ny = next.y * CELL_SIZE + CELL_SIZE / 2;
+          const tNext = 1 - ((i + 1) / (n - 1)) * 0.6;
+          const rNext = maxBodyR * tNext;
+          const midR = (r + rNext) / 2;
+          this.bgGraphics.fillStyle(snake.color, alpha * 0.85);
+          this.bgGraphics.fillCircle((cx + nx) / 2, (cy + ny) / 2, midR);
         }
+
+        // Scale stripe: alternate darker/lighter rings
+        const scaleAlpha = i % 2 === 0 ? alpha * 0.95 : alpha * 0.70;
+        this.bgGraphics.fillStyle(snake.color, scaleAlpha);
+        this.bgGraphics.fillCircle(cx, cy, r);
+
+        // Belly highlight (lighter ellipse on underside)
+        const bellyColor = this.shiftColor(snake.color, 1.35);
+        this.bgGraphics.fillStyle(bellyColor, alpha * 0.35);
+        this.bgGraphics.fillEllipse(cx, cy, r * 1.1, r * 0.55);
+
+        // Dark dorsal stripe dot
+        const dorsalColor = this.shiftColor(snake.color, 0.55);
+        this.bgGraphics.fillStyle(dorsalColor, alpha * 0.55);
+        this.bgGraphics.fillCircle(cx, cy, r * 0.38);
+      }
+
+      // ── Head ────────────────────────────────────────────────
+      const hx = segs[0].x * CELL_SIZE + CELL_SIZE / 2;
+      const hy = segs[0].y * CELL_SIZE + CELL_SIZE / 2;
+
+      // Boss crown glow
+      if (snake.isBoss) {
+        this.bgGraphics.fillStyle(0xffaa00, alpha * 0.45);
+        this.bgGraphics.fillCircle(hx, hy, headR + 6);
+      }
+
+      // Head base
+      this.bgGraphics.fillStyle(snake.color, alpha);
+      this.bgGraphics.fillCircle(hx, hy, headR);
+
+      // Head elongation toward mouth
+      this.bgGraphics.fillStyle(snake.color, alpha);
+      this.bgGraphics.fillEllipse(
+        hx + dx * headR * 0.45,
+        hy + dy * headR * 0.45,
+        headR * 1.6 + Math.abs(dx) * headR * 0.4,
+        headR * 1.6 + Math.abs(dy) * headR * 0.4
+      );
+
+      // Belly highlight on head
+      const headBelly = this.shiftColor(snake.color, 1.4);
+      this.bgGraphics.fillStyle(headBelly, alpha * 0.45);
+      this.bgGraphics.fillEllipse(hx, hy, headR * 1.1, headR * 0.6);
+
+      // Dark dorsal head stripe
+      const headDorsal = this.shiftColor(snake.color, 0.5);
+      this.bgGraphics.fillStyle(headDorsal, alpha * 0.5);
+      this.bgGraphics.fillCircle(hx - dx * 2, hy - dy * 2, headR * 0.4);
+
+      // Eyes — on sides of head, forward-facing
+      const eyeDist = headR * 0.52;
+      const eyeFwd  = headR * 0.28;
+      for (const side of [1, -1]) {
+        const ex = hx + px2 * side * eyeDist + dx * eyeFwd;
+        const ey = hy + py2 * side * eyeDist + dy * eyeFwd;
+        // Sclera
+        this.bgGraphics.fillStyle(0xffffcc, alpha);
+        this.bgGraphics.fillCircle(ex, ey, 2.6);
+        // Pupil (slit — approximate with dark circle offset toward mouth)
+        this.bgGraphics.fillStyle(0x0a0a0a, alpha);
+        this.bgGraphics.fillCircle(ex + dx * 0.6, ey + dy * 0.6, 1.5);
+        // Eye shine
+        this.bgGraphics.fillStyle(0xffffff, alpha * 0.9);
+        this.bgGraphics.fillCircle(ex + dx * 0.2 - px2 * side * 0.5, ey + dy * 0.2 - py2 * side * 0.5, 0.6);
+      }
+
+      // Tongue (forked, flickers)
+      if (tongueOut && !stunned) {
+        const tBase  = headR + 2;
+        const tLen   = 7;
+        const fLen   = 4;
+        const t0x = hx + dx * tBase;
+        const t0y = hy + dy * tBase;
+        const t1x = t0x + dx * tLen;
+        const t1y = t0y + dy * tLen;
+        this.bgGraphics.fillStyle(0xff2255, alpha);
+        // Shaft (thin rectangle along direction)
+        this.bgGraphics.fillRect(t0x - px2 * 0.8, t0y - py2 * 0.8, dx * tLen + px2 * 1.6, dy * tLen + py2 * 1.6);
+        // Left fork
+        this.bgGraphics.fillRect(t1x - px2 * 0.7, t1y - py2 * 0.7,
+          (dx - py2) * fLen + px2 * 1.4, (dy + px2) * fLen + py2 * 1.4);
+        // Right fork
+        this.bgGraphics.fillRect(t1x - px2 * 0.7, t1y - py2 * 0.7,
+          (dx + py2) * fLen + px2 * 1.4, (dy - px2) * fLen + py2 * 1.4);
+      }
+
+      // Stunned stars
+      if (stunned) {
+        this.bgGraphics.fillStyle(0xffff44, 0.9);
+        this.bgGraphics.fillCircle(hx,           hy - headR - 6, 3.2);
+        this.bgGraphics.fillCircle(hx - 7,       hy - headR - 2, 2.2);
+        this.bgGraphics.fillCircle(hx + 7,       hy - headR - 2, 2.2);
       }
     }
+  }
+
+  /** Multiply each RGB channel by factor (>1 = lighter, <1 = darker) */
+  private shiftColor(hex: number, factor: number): number {
+    const r = Math.min(255, Math.round(((hex >> 16) & 0xff) * factor));
+    const g = Math.min(255, Math.round(((hex >>  8) & 0xff) * factor));
+    const b = Math.min(255, Math.round(( hex        & 0xff) * factor));
+    return (r << 16) | (g << 8) | b;
   }
 
   private drawGlory(): void {
