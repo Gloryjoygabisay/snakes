@@ -1061,3 +1061,95 @@ kbd {
   font-size: 0.8rem;
   padding: 0.3rem 0.7rem;
 }
+
+/* ============================================================
+   Venom Arena – Glory stats & Susie helper
+   ============================================================ */
+
+#glory-stats {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+#lives-display {
+  font-size: 1.35rem;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+
+#survival-timer {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #4ecca3;
+  letter-spacing: 0.05em;
+}
+
+#glory-score-display {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Susie bubble */
+.susie-bubble {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: linear-gradient(135deg, #1e3a2a 0%, #0d2218 100%);
+  border: 1px solid #2a6a4a;
+  border-radius: 14px;
+  padding: 0.7rem 1rem;
+  margin: 0.5rem 0;
+  animation: susie-pop 0.3s ease-out;
+}
+
+@keyframes susie-pop {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.susie-avatar {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.susie-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+#susie-message {
+  font-size: 0.82rem;
+  color: #a8d8b8;
+  font-style: italic;
+}
+
+.susie-btn {
+  background: linear-gradient(135deg, #27ae60, #1e8449);
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+  letter-spacing: 0.02em;
+}
+
+.susie-btn:hover {
+  filter: brightness(1.2);
+  transform: scale(1.04);
+}
+
+.susie-btn:active {
+  transform: scale(0.97);
+}

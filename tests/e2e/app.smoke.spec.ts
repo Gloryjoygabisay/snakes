@@ -7,8 +7,12 @@ test.describe('app browser smoke test', () => {
     await expect(page).toHaveTitle(/Venom Arena/i);
     await expect(page.locator('#start-screen')).toBeVisible();
     await expect(page.locator('#start-title')).toHaveText('Venom Arena');
-    await expect(page.locator('#start-button')).toHaveText('Start Game');
     await expect(page.locator('#start-about-button')).toHaveText('About');
+
+    // Mode selection cards should be visible
+    await expect(page.locator('.mode-card[data-mode="explorer"]')).toBeVisible();
+    await expect(page.locator('.mode-card[data-mode="survivor"]')).toBeVisible();
+    await expect(page.locator('.mode-card[data-mode="legend"]')).toBeVisible();
 
     const aboutPanel = page.locator('#about-panel');
     await expect(aboutPanel).toBeHidden();

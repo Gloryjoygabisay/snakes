@@ -99,60 +99,34 @@
 
       <div class="panel">
 
-        <!-- Mode/Level progress -->
+        <!-- Glory stats -->
         <div class="level-card">
           <h2 id="level-heading">🌿 Explorer · Wanderer</h2>
-          <div class="level-goal-label">Foods eaten</div>
-          <div id="foods-eaten-count" class="foods-eaten-count">0 / 10,000</div>
-          <div class="progress-bar-wrap">
-            <div id="foods-progress-bar" class="progress-bar-fill"></div>
+          <div id="glory-stats">
+            <div id="lives-display">❤️❤️❤️</div>
+            <div id="survival-timer">00:00</div>
+            <div id="glory-score-display">Score: 0</div>
           </div>
-          <div class="level-goal-hint">Eat 10,000 foods to complete this level!</div>
+          <div class="progress-bar-wrap" style="margin-top:0.5rem">
+            <div id="survival-progress-bar" class="progress-bar-fill"></div>
+          </div>
+          <div class="level-goal-label" id="survival-goal-label">Survive 1:00</div>
         </div>
 
-        <!-- Power-up HUD -->
-        <div class="powerup-card">
-          <h2>Power-Up</h2>
-          <div id="powerup-display" class="powerup-display">None</div>
-          <div id="powerup-timer" class="powerup-timer"></div>
-        </div>
-
-        <!-- Scores -->
-        <div class="players-card">
-          <h2>Scores</h2>
-          <div class="player-score human-color">
-            <span class="player-label">🎮 You</span>
-            <span class="player-keys">Touch &amp; hold to steer / WASD</span>
-            <strong id="p1-score">0</strong>
+        <!-- Susie bubble -->
+        <div id="susie-bubble" class="hidden susie-bubble">
+          <span class="susie-avatar">👩</span>
+          <div class="susie-content">
+            <span id="susie-message">Susie says: Use this!</span>
+            <button id="susie-powerup-btn" class="susie-btn">🔦 Flashlight</button>
           </div>
-          <div class="player-score ai1-color">
-            <span class="player-label">🤖 AI Blue</span>
-            <strong id="p2-score">0</strong>
-          </div>
-          <div class="player-score ai2-color">
-            <span class="player-label">🤖 AI Green</span>
-            <strong id="p3-score">0</strong>
-          </div>
-          <div class="player-score ai3-color">
-            <span class="player-label">🤖 AI Orange</span>
-            <strong id="p4-score">0</strong>
-          </div>
-        </div>
-
-        <!-- Food legend -->
-        <div class="food-legend-card">
-          <h2>Foods</h2>
-          <div class="food-item"><span class="food-dot apple-dot">●</span><span>Apple — grow +1, +10pts</span></div>
-          <div class="food-item"><span class="food-dot speed-dot">⚡</span><span>Speed — 5s boost</span></div>
-          <div class="food-item"><span class="food-dot shield-dot">🛡</span><span>Shield — absorb 1 hit</span></div>
-          <div class="food-item"><span class="food-dot skull-dot">💀</span><span>Skull — shrink 3!</span></div>
-          <div class="food-item"><span class="food-dot star-dot">⭐</span><span>Star — +50pts</span></div>
         </div>
 
         <!-- Instructions -->
         <div class="instructions-card">
           <h2>How to Play</h2>
-          <p>Touch &amp; hold the screen — the snake steers toward your finger. Desktop: <kbd>WASD</kbd> or arrow keys. <kbd>Space</kbd> to restart.</p>
+          <p>You are <strong>Glory</strong> 🟢 — drag/touch the canvas to move. Avoid the snakes! Susie 👩 will offer power-ups to help you survive.</p>
+          <p style="margin-top:0.4rem">🔦 Flashlight · 🪤 Trap · ⚡ Speed · 💡 Hint</p>
         </div>
 
       </div>

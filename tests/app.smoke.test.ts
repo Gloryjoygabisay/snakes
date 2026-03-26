@@ -32,19 +32,33 @@ describe('app bootstrap smoke test', () => {
     await import('../src/main');
 
     expect(document.getElementById('start-title')?.textContent).toBe('Venom Arena');
-    expect(document.getElementById('start-button')?.textContent).toBe('Play Game');
-    // check p1-score exists in HTML
-    expect(document.getElementById('p1-score')).not.toBeNull();
-    expect(document.getElementById('challenge-overlay')).not.toBeNull();
 
+    // Venom Arena uses mode cards → level cards to start the game
+    expect(document.getElementById('mode-select')).not.toBeNull();
+    expect(document.getElementById('level-cards')).not.toBeNull();
+
+    // New survival UI elements exist
+    expect(document.getElementById('lives-display')).not.toBeNull();
+    expect(document.getElementById('survival-timer')).not.toBeNull();
+    expect(document.getElementById('susie-bubble')).not.toBeNull();
+
+    // About panel works
     (document.getElementById('start-about-button') as HTMLButtonElement).click();
     expect(document.getElementById('about-panel')?.classList.contains('hidden')).toBe(false);
 
     (document.getElementById('close-about') as HTMLButtonElement).click();
     expect(document.getElementById('about-panel')?.classList.contains('hidden')).toBe(true);
 
-    (document.getElementById('start-button') as HTMLButtonElement).click();
+    // Clicking a mode card shows level screen
+    const explorerCard = document.querySelector<HTMLElement>('.mode-card[data-mode="explorer"]');
+    explorerCard?.click();
+    expect(document.getElementById('level-screen')?.classList.contains('hidden')).toBe(false);
+
+    // Clicking a level card starts the game
+    const levelCard = document.querySelector<HTMLElement>('.level-select-card[data-level="1"]');
+    levelCard?.click();
     await Promise.resolve();
+    await Promise.resolve(); // extra tick for async startGame
 
     expect(createGameMock).toHaveBeenCalledOnce();
     expect(document.getElementById('start-screen')?.classList.contains('hidden')).toBe(true);
