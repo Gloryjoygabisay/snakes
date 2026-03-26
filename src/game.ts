@@ -640,6 +640,7 @@ class VenomArenaScene extends Phaser.Scene {
   private bgGraphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private topGraphics!: Phaser.GameObjects.Graphics;
+  private explorerBgImage: Phaser.GameObjects.Image | null = null;
 
   private overlayText!: Phaser.GameObjects.Text;
 
@@ -695,10 +696,21 @@ class VenomArenaScene extends Phaser.Scene {
     super({ key: 'VenomArenaScene' });
   }
 
+  preload(): void {
+    this.load.image('explorer-bg', 'explorer-bg.png');
+  }
+
   create(): void {
     this.bgGraphics     = this.add.graphics();
     this.overlayGraphics = this.add.graphics();
     this.topGraphics    = this.add.graphics();
+
+    // Explorer mode: use the mountain path background image
+    if (gameMode === 'explorer' && this.textures.exists('explorer-bg')) {
+      this.explorerBgImage = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'explorer-bg')
+        .setDisplaySize(CANVAS_W, CANVAS_H)
+        .setDepth(-1);
+    }
 
     this.overlayText = this.add.text(CANVAS_W / 2, CANVAS_H / 2, '', {
       fontSize: '30px',
@@ -1519,83 +1531,101 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    this.bgGraphics.fillStyle(0x2d5a1b);
-    this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    const isExplorer = gameMode === 'explorer' && this.explorerBgImage !== null;
 
-    // Dirt path strip through middle rows (y=200 to y=280)
-    this.bgGraphics.fillStyle(0x8b6914, 0.55);
-    this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
-    // Path texture with lighter patches
-    this.bgGraphics.fillStyle(0xa07840, 0.25);
-    for (let i = 0; i < 20; i++) {
-      this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
-      this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
-    }
-    // Grass tufts (deterministic positions, skip path strip)
-    this.bgGraphics.fillStyle(0x3d8c28, 0.6);
-    for (let i = 0; i < 40; i++) {
-      const gx = ((i * 47 + 13) % CANVAS_W);
-      const gy = ((i * 31 + 7) % CANVAS_H);
-      if (gy > 195 && gy < 285) continue;
-      this.bgGraphics.fillEllipse(gx, gy, 8, 4);
-    }
+    if (!isExplorer) {
+      // Non-explorer: full programmatic mountain background
+      this.bgGraphics.fillStyle(0x2d5a1b);
+      this.bgGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    this.bgGraphics.fillStyle(0x6b5744);
-    for (const rock of TERRAIN_ROCKS) {
-      this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
-    }
-
-    this.bgGraphics.fillStyle(0x1c2030, 0.7);
-    for (let i = 0; i < CANVAS_W; i += 22) {
-      this.bgGraphics.fillCircle(i, CANVAS_H / 2, 1.2);
-    }
-    for (let i = 0; i < 28; i++) {
-      this.bgGraphics.fillCircle(i * 24, i * 18, 1.2);
-    }
-    for (let i = 0; i < 20; i++) {
-      this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
-    }
-
-    // Draw walls — use brown plank style if level has an exit zone (bridge level)
-    const isBridgeLevel = !!this.exitZone;
-    if (isBridgeLevel) {
-      // Wood planks (warm updated)
-      this.bgGraphics.fillStyle(0x8b6520);
-      for (const key of this.walls) {
-        const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      // Dirt path strip through middle rows (y=200 to y=280)
+      this.bgGraphics.fillStyle(0x8b6914, 0.55);
+      this.bgGraphics.fillRect(0, 200, CANVAS_W, 80);
+      this.bgGraphics.fillStyle(0xa07840, 0.25);
+      for (let i = 0; i < 20; i++) {
+        this.bgGraphics.fillEllipse(i * 34, 228, 28, 14);
+        this.bgGraphics.fillEllipse(i * 34 + 17, 252, 22, 10);
       }
-      // Plank grain lines
-      this.bgGraphics.lineStyle(1, 0x5a3210, 0.7);
-      for (const key of this.walls) {
-        const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-        // Horizontal grain
-        this.bgGraphics.strokeRect(col * CELL_SIZE + 2, row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE - 4, 0);
+      // Grass tufts
+      this.bgGraphics.fillStyle(0x3d8c28, 0.6);
+      for (let i = 0; i < 40; i++) {
+        const gx = ((i * 47 + 13) % CANVAS_W);
+        const gy = ((i * 31 + 7) % CANVAS_H);
+        if (gy > 195 && gy < 285) continue;
+        this.bgGraphics.fillEllipse(gx, gy, 8, 4);
       }
-      // Lighter top edge highlight
-      this.bgGraphics.fillStyle(0xc89040, 0.35);
+      this.bgGraphics.fillStyle(0x6b5744);
+      for (const rock of TERRAIN_ROCKS) {
+        this.bgGraphics.fillEllipse(rock.x, rock.y, rock.rw, rock.rh);
+      }
+      this.bgGraphics.fillStyle(0x1c2030, 0.7);
+      for (let i = 0; i < CANVAS_W; i += 22) {
+        this.bgGraphics.fillCircle(i, CANVAS_H / 2, 1.2);
+      }
+      for (let i = 0; i < 28; i++) {
+        this.bgGraphics.fillCircle(i * 24, i * 18, 1.2);
+      }
+      for (let i = 0; i < 20; i++) {
+        this.bgGraphics.fillCircle(CANVAS_W - i * 32, i * 24, 1.2);
+      }
+    }
+
+    // Draw walls
+    if (isExplorer) {
+      // Bamboo fence style to match the mountain path image
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
+        const px = col * CELL_SIZE;
+        const py = row * CELL_SIZE;
+        // Bamboo post (rounded tan rectangle)
+        this.bgGraphics.fillStyle(0xc8a050);
+        this.bgGraphics.fillRect(px + 3, py + 1, CELL_SIZE - 6, CELL_SIZE - 2);
+        // Post top cap (lighter)
+        this.bgGraphics.fillStyle(0xe8c070);
+        this.bgGraphics.fillRect(px + 3, py + 1, CELL_SIZE - 6, 4);
+        // Post shadow sides
+        this.bgGraphics.fillStyle(0x8b6020, 0.5);
+        this.bgGraphics.fillRect(px + 3, py + 1, 3, CELL_SIZE - 2);
+        this.bgGraphics.fillRect(px + CELL_SIZE - 6, py + 1, 3, CELL_SIZE - 2);
+        // Horizontal rail line
+        this.bgGraphics.lineStyle(1.5, 0xa07838, 0.8);
+        this.bgGraphics.strokeRect(px + 3, py + CELL_SIZE / 2, CELL_SIZE - 6, 0);
       }
     } else {
-      // Rocky mountain stone
-      this.bgGraphics.fillStyle(0x7a6850);
-      for (const key of this.walls) {
-        const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      }
-      // Top highlight strip
-      this.bgGraphics.fillStyle(0xaa9070, 0.4);
-      for (const key of this.walls) {
-        const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
-      }
-      this.bgGraphics.lineStyle(1, 0x5a4a38, 0.6);
-      for (const key of this.walls) {
-        const [col, row] = key.split(',').map(Number);
-        this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      const isBridgeLevel = !!this.exitZone;
+      if (isBridgeLevel) {
+        this.bgGraphics.fillStyle(0x8b6520);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+        this.bgGraphics.lineStyle(1, 0x5a3210, 0.7);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+          this.bgGraphics.strokeRect(col * CELL_SIZE + 2, row * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE - 4, 0);
+        }
+        this.bgGraphics.fillStyle(0xc89040, 0.35);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
+        }
+      } else {
+        this.bgGraphics.fillStyle(0x7a6850);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+        this.bgGraphics.fillStyle(0xaa9070, 0.4);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, 3);
+        }
+        this.bgGraphics.lineStyle(1, 0x5a4a38, 0.6);
+        for (const key of this.walls) {
+          const [col, row] = key.split(',').map(Number);
+          this.bgGraphics.strokeRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
       }
     }
   }
@@ -2002,6 +2032,8 @@ class VenomArenaScene extends Phaser.Scene {
   shutdown(): void {
     this.threeEffects?.destroy();
     this.threeEffects = null;
+    this.explorerBgImage?.destroy();
+    this.explorerBgImage = null;
     this.snakeTickTimer?.remove();
     if (this.powerUpOfferTimeout) {
       clearTimeout(this.powerUpOfferTimeout);
