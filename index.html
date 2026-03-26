@@ -15,7 +15,7 @@
       <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
       <h1 id="start-title">Snake IQ Survival</h1>
-      <p id="start-blurb">Navigate the arena, eat power foods, and outlast 3 AI snakes. Die and get a second chance — answer a logic question to revive! 🧠🐍</p>
+      <p id="start-blurb">Navigate the arena, eat power foods, and outlast 3 AI snakes. Eat 10,000 foods to unlock Level 2! 🐍🏆</p>
 
       <!-- Color picker -->
       <div id="color-picker">
@@ -55,6 +55,17 @@
       <button id="retry-btn" class="hidden">&#8635; Play Again</button>
 
       <div class="panel">
+
+        <!-- Level progress -->
+        <div class="level-card">
+          <h2>🏆 Level 1 — Easy</h2>
+          <div class="level-goal-label">Foods eaten</div>
+          <div id="foods-eaten-count" class="foods-eaten-count">0 / 10,000</div>
+          <div class="progress-bar-wrap">
+            <div id="foods-progress-bar" class="progress-bar-fill"></div>
+          </div>
+          <div class="level-goal-hint">Eat 10,000 foods to unlock Level 2!</div>
+        </div>
 
         <!-- Power-up HUD -->
         <div class="powerup-card">
@@ -129,7 +140,7 @@
       <div class="about-card">
         <p id="about-kicker">About</p>
         <h2 id="about-title">Snake IQ Survival</h2>
-        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 open arena. Eat 5 types of food for power-ups and points. When you die, a timed logic challenge appears — answer correctly to revive and keep your score! Outlast all AI snakes to win.</p>
+        <p id="about-body">1 human (you) vs 3 AI snakes on a 32×24 open arena. Eat 5 types of food for power-ups and points. Level 1 (Easy): eat 10,000 foods to unlock Level 2!</p>
         <p id="about-version-label">Version: <span id="about-version-value"></span></p>
         <button id="close-about" class="secondary-button">Close</button>
       </div>

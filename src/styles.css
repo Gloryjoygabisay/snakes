@@ -497,6 +497,7 @@ kbd {
   .powerup-card,
   .players-card,
   .food-legend-card,
+  .level-card,
   .instructions-card {
     flex: 1 1 160px;
   }
@@ -537,6 +538,7 @@ kbd {
 
   .players-card,
   .food-legend-card,
+  .level-card,
   .powerup-card,
   .instructions-card {
     width: 100%;
@@ -724,6 +726,61 @@ kbd {
 /* ============================================================
    Power-up Card
    ============================================================ */
+/* ============================================================
+   Level Progress Card
+   ============================================================ */
+.level-card {
+  background: rgba(20, 50, 10, 0.92);
+  border: 1px solid rgba(100, 220, 80, 0.4);
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.level-card h2 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7ed458;
+  margin-bottom: 0.5rem;
+}
+
+.level-goal-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.2rem;
+}
+
+.foods-eaten-count {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #a0f07a;
+  margin-bottom: 0.5rem;
+}
+
+.progress-bar-wrap {
+  background: rgba(255,255,255,0.1);
+  border-radius: 8px;
+  height: 10px;
+  overflow: hidden;
+  margin-bottom: 0.4rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #4caf50, #a5d6a7);
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+
+.level-goal-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .powerup-card {
   background: rgba(30, 40, 50, 0.9);
   border: 1px solid rgba(78, 204, 163, 0.3);
