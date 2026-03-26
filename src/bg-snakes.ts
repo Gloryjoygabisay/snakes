@@ -29,6 +29,18 @@ function darken(hex: string, f: number): string {
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
 }
 
+function colorVariant(hex: string, f: number): string {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, Math.floor(((n >> 16) & 0xff) * f));
+  const g = Math.min(255, Math.floor(((n >>  8) & 0xff) * f));
+  const b = Math.min(255, Math.floor(( n        & 0xff) * f));
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+// Brightness factors applied per-snake so each snake is a unique shade of the chosen color
+const BODY_FACTORS  = [1.0, 0.75, 1.35, 0.60, 1.2, 0.90, 1.1, 0.80, 1.30, 0.70];
+const HEAD_FACTORS  = [1.3, 1.05, 1.60, 0.85, 1.5, 1.15, 1.3, 1.05, 1.55, 0.90];
+
 function makeSnake(
   x: number, y: number, angle: number,
   color: string, headColor: string,
@@ -135,7 +147,7 @@ function drawSnake(ctx: CanvasRenderingContext2D, s: BgSnake): void {
   ctx.globalAlpha = 1;
 }
 
-export function startBgAnimation(canvas: HTMLCanvasElement): () => void {
+export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void; setColors: (body: string, head: string) => void } {
   const ctx = canvas.getContext('2d')!;
   let running = true;
   let animId  = 0;
@@ -154,13 +166,24 @@ export function startBgAnimation(canvas: HTMLCanvasElement): () => void {
 
   // Build snakes after first resize tick so W/H are valid
   const snakes: BgSnake[] = [
-    makeSnake(-80,  H()*0.15, 0.15,    '#e74c3c', '#ff6b6b', 20, 2.0, 0.55, 0.40, 0,   22),
-    makeSnake(W()+80, H()*0.60, Math.PI-0.2, '#3498db', '#74b9ff', 18, 1.7, 0.65, 0.45, 2.0, 20),
-    makeSnake(-80,  H()*0.82, 0.05,    '#00b894', '#55efc4', 17, 1.5, 0.75, 0.50, 4.0, 19),
-    makeSnake(W()+80, H()*0.38, Math.PI+0.1, '#6c5ce7', '#a29bfe', 17, 1.6, 0.60, 0.42, 1.2, 18),
-    makeSnake(-80,  H()*0.50, -0.1,   '#f1c40f', '#ffeaa7', 16, 1.3, 0.85, 0.38, 3.0, 17),
-    makeSnake(W()+80, H()*0.22, Math.PI+0.05, '#e84393', '#fd79a8', 15, 1.4, 0.70, 0.35, 5.5, 16),
+    makeSnake(-80,        H()*0.15, 0.15,         '#e74c3c', '#ff6b6b', 20, 2.0, 0.55, 0.40, 0.0, 22),
+    makeSnake(W()+80,     H()*0.60, Math.PI-0.2,  '#3498db', '#74b9ff', 18, 1.7, 0.65, 0.45, 2.0, 20),
+    makeSnake(-80,        H()*0.82, 0.05,          '#00b894', '#55efc4', 17, 1.5, 0.75, 0.50, 4.0, 19),
+    makeSnake(W()+80,     H()*0.38, Math.PI+0.1,  '#6c5ce7', '#a29bfe', 17, 1.6, 0.60, 0.42, 1.2, 18),
+    makeSnake(-80,        H()*0.50, -0.1,          '#f1c40f', '#ffeaa7', 16, 1.3, 0.85, 0.38, 3.0, 17),
+    makeSnake(W()+80,     H()*0.22, Math.PI+0.05, '#e84393', '#fd79a8', 15, 1.4, 0.70, 0.35, 5.5, 16),
+    makeSnake(W()*0.50,  -80,       Math.PI*0.5,  '#fd9644', '#ffc870', 19, 1.8, 0.60, 0.42, 1.5, 21),
+    makeSnake(W()*0.25,  H()+80,   -Math.PI*0.5,  '#00cec9', '#81ecec', 16, 1.6, 0.70, 0.48, 6.0, 18),
+    makeSnake(W()*0.75,  -80,       Math.PI*0.55, '#a29bfe', '#d6c7ff', 18, 1.9, 0.50, 0.36, 2.5, 20),
+    makeSnake(W()*0.50,  H()+80,   -Math.PI*0.6,  '#55efc4', '#b2fef0', 15, 1.4, 0.80, 0.44, 4.8, 17),
   ];
+
+  function setColors(body: string, head: string): void {
+    snakes.forEach((s, i) => {
+      s.color     = colorVariant(body, BODY_FACTORS[i] ?? 1.0);
+      s.headColor = colorVariant(head, HEAD_FACTORS[i] ?? 1.3);
+    });
+  }
 
   let last = performance.now();
 
@@ -210,9 +233,12 @@ export function startBgAnimation(canvas: HTMLCanvasElement): () => void {
 
   animId = requestAnimationFrame(tick);
 
-  return () => {
-    running = false;
-    cancelAnimationFrame(animId);
-    ro?.disconnect();
+  return {
+    stop: () => {
+      running = false;
+      cancelAnimationFrame(animId);
+      ro?.disconnect();
+    },
+    setColors,
   };
 }

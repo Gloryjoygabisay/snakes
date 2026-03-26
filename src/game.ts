@@ -813,21 +813,6 @@ class SnakeScene extends Phaser.Scene {
     g.fillStyle(0x0d1a0d);
     g.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Grid lines (very subtle)
-    g.lineStyle(1, 0x1a2e1a, 1);
-    for (let col = 0; col <= COLS; col++) {
-      g.beginPath();
-      g.moveTo(col * CELL_SIZE, 0);
-      g.lineTo(col * CELL_SIZE, CANVAS_H);
-      g.strokePath();
-    }
-    for (let row = 0; row <= ROWS; row++) {
-      g.beginPath();
-      g.moveTo(0, row * CELL_SIZE);
-      g.lineTo(CANVAS_W, row * CELL_SIZE);
-      g.strokePath();
-    }
-
     // Food
     for (const food of this.foods) {
       const cx = food.x * CELL_SIZE + CELL_SIZE / 2;

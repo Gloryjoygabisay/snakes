@@ -7,8 +7,7 @@ import packageJson from '../package.json';
 let gameController: GameController | null = null;
 let gameModulePromise: Promise<typeof import('./game')> | null = null;
 let isStarting = false;
-let stopBgAnim: (() => void) | null = null;
-const appVersion = import.meta.env.VITE_APP_VERSION || packageJson.version;
+let bgAnim: { stop: () => void; setColors: (b: string, h: string) => void } | null = null;const appVersion = import.meta.env.VITE_APP_VERSION || packageJson.version;
 
 // Track selected snake color (defaults to red)
 let selectedBodyColor = 0xe74c3c;
@@ -63,8 +62,8 @@ async function startGame(): Promise<void> {
     }
   }
   // Stop background animation to save resources while playing
-  stopBgAnim?.();
-  stopBgAnim = null;
+  bgAnim?.stop();
+  bgAnim = null;
   startScreen?.classList.add('hidden');
   gameShell?.classList.remove('hidden');
 }
@@ -77,6 +76,8 @@ document.getElementById('color-swatches')?.addEventListener('click', (e) => {
   btn.classList.add('selected');
   selectedBodyColor = parseInt((btn.dataset.body ?? 'e74c3c').replace('#', ''), 16);
   selectedHeadColor = parseInt((btn.dataset.head ?? 'ff6b6b').replace('#', ''), 16);
+  // Sync background snake colors to the chosen color
+  bgAnim?.setColors(btn.dataset.body ?? '#e74c3c', btn.dataset.head ?? '#ff6b6b');
   // Reflect chosen color on the preview dot in the swatch
 });
 
@@ -95,6 +96,6 @@ document.getElementById('retry-btn')?.addEventListener('click', () => {
 
 // Start the animated canvas background
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement | null;
-if (bgCanvas) stopBgAnim = startBgAnimation(bgCanvas);
+if (bgCanvas) bgAnim = startBgAnimation(bgCanvas);
 
 setVersionText();
