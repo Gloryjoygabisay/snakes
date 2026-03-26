@@ -134,17 +134,6 @@ async function startGame(): Promise<void> {
 
 // ── Event listeners ──────────────────────────────────────────
 
-// Color swatches
-document.getElementById('color-swatches')?.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('.color-swatch');
-  if (!btn) return;
-  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
-  btn.classList.add('selected');
-  selectedBodyColor = parseInt((btn.dataset.body ?? 'e74c3c').replace('#', ''), 16);
-  selectedHeadColor = parseInt((btn.dataset.head ?? 'ff6b6b').replace('#', ''), 16);
-  bgAnim?.setColors(btn.dataset.body ?? '#e74c3c', btn.dataset.head ?? '#ff6b6b');
-});
-
 // Mode card → level screen
 document.getElementById('mode-select')?.addEventListener('click', (e) => {
   const card = (e.target as HTMLElement).closest<HTMLElement>('.mode-card');
