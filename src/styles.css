@@ -461,6 +461,49 @@ kbd {
 #next-level-btn:active { transform: scale(0.96); }
 
 /* ============================================================
+   Virtual Joystick
+   ============================================================ */
+#joystick-zone {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem 0 0.25rem;
+  touch-action: none;
+  user-select: none;
+}
+
+#joystick-base {
+  position: relative;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(78, 204, 163, 0.12);
+  border: 2.5px solid rgba(78, 204, 163, 0.35);
+  box-shadow: 0 0 18px rgba(78, 204, 163, 0.15);
+  touch-action: none;
+}
+
+#joystick-knob {
+  position: absolute;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 35%, #7effd4, #4ecca3 60%, #2a9d8f);
+  box-shadow: 0 0 14px rgba(78, 204, 163, 0.6), inset 0 1px 3px rgba(255,255,255,0.3);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: box-shadow 0.1s;
+  touch-action: none;
+  cursor: grab;
+}
+
+#joystick-knob.active {
+  cursor: grabbing;
+  box-shadow: 0 0 22px rgba(78, 204, 163, 0.9), inset 0 1px 3px rgba(255,255,255,0.3);
+}
+
+/* ============================================================
    Touch controls (legacy class kept for compat)
    ============================================================ */
 .touch-controls {

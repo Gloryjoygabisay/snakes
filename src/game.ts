@@ -637,7 +637,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   private overlayText!: Phaser.GameObjects.Text;
 
-  private pointerDown = false;
+  private joystickActive = false;
   private dragDir: { dx: number; dy: number } | null = null;
 
   private snakeTickTimer: Phaser.Time.TimerEvent | null = null;
@@ -792,7 +792,7 @@ class VenomArenaScene extends Phaser.Scene {
     this.susieOfferActive = false;
     this.spawnAccumMs = 0;
     this.dragDir = null;
-    this.pointerDown = false;
+    this.joystickActive = false;
 
     this.startSnakeTimer(config.snakeTickMs);
   }
@@ -843,27 +843,76 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private setupInput(): void {
+    // Phaser input: only used for trap placement clicks on canvas
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
       if (this.waitingForTrapPlacement) {
         this.placeTrap(ptr.x, ptr.y);
-        return;
       }
-      this.pointerDown = true;
-      this.updateDragDir(ptr.x, ptr.y);
     });
-    this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
-      if (this.pointerDown) this.updateDragDir(ptr.x, ptr.y);
-    });
-    this.input.on('pointerup', () => { this.pointerDown = false; });
-  }
 
-  private updateDragDir(px: number, py: number): void {
-    const dx = px - this.glory.x;
-    const dy = py - this.glory.y;
-    const len = Math.hypot(dx, dy);
-    if (len > 8) {
-      this.dragDir = { dx: dx / len, dy: dy / len };
-    }
+    // Virtual joystick via DOM
+    const base  = document.getElementById('joystick-base');
+    const knob  = document.getElementById('joystick-knob');
+    if (!base || !knob) return;
+
+    const KNOB_MAX = 39; // max knob travel from center (base radius - knob radius)
+    let baseRect = base.getBoundingClientRect();
+    let activePtrId: number | null = null;
+
+    const onStart = (e: PointerEvent): void => {
+      if (activePtrId !== null) return;
+      activePtrId = e.pointerId;
+      base.setPointerCapture(e.pointerId);
+      baseRect = base.getBoundingClientRect();
+      this.joystickActive = true;
+      knob.classList.add('active');
+      moveKnob(e.clientX, e.clientY);
+    };
+
+    const onMove = (e: PointerEvent): void => {
+      if (e.pointerId !== activePtrId) return;
+      moveKnob(e.clientX, e.clientY);
+    };
+
+    const onEnd = (e: PointerEvent): void => {
+      if (e.pointerId !== activePtrId) return;
+      activePtrId = null;
+      this.joystickActive = false;
+      this.dragDir = null;
+      knob.style.transform = 'translate(-50%, -50%)';
+      knob.classList.remove('active');
+    };
+
+    const moveKnob = (clientX: number, clientY: number): void => {
+      const cx = baseRect.left + baseRect.width  / 2;
+      const cy = baseRect.top  + baseRect.height / 2;
+      let dx = clientX - cx;
+      let dy = clientY - cy;
+      const dist = Math.hypot(dx, dy);
+      if (dist > KNOB_MAX) {
+        dx = (dx / dist) * KNOB_MAX;
+        dy = (dy / dist) * KNOB_MAX;
+      }
+      knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      if (dist > 6) {
+        const len = Math.hypot(dx, dy);
+        this.dragDir = { dx: dx / len, dy: dy / len };
+      } else {
+        this.dragDir = null;
+      }
+    };
+
+    base.addEventListener('pointerdown', onStart);
+    base.addEventListener('pointermove', onMove);
+    base.addEventListener('pointerup',   onEnd);
+    base.addEventListener('pointercancel', onEnd);
+
+    this.domListeners.push(
+      { el: base, event: 'pointerdown',   fn: onStart as EventListener },
+      { el: base, event: 'pointermove',   fn: onMove  as EventListener },
+      { el: base, event: 'pointerup',     fn: onEnd   as EventListener },
+      { el: base, event: 'pointercancel', fn: onEnd   as EventListener },
+    );
   }
 
   private placeTrap(px: number, py: number): void {
@@ -991,7 +1040,7 @@ class VenomArenaScene extends Phaser.Scene {
     }
 
     // Move Glory with wall collision
-    if (this.pointerDown && this.dragDir) {
+    if (this.joystickActive && this.dragDir) {
       const spd = this.activePowerUp?.kind === 'speed'
         ? this.glory.speed * 1.8
         : this.glory.speed;
