@@ -8,9 +8,26 @@ const ROWS = 24;
 const CANVAS_W = COLS * CELL_SIZE;
 const CANVAS_H = ROWS * CELL_SIZE;
 const FOOD_COUNT = 3;
-const BASE_TICK_MS = 150;
 const SPEED_BOOST_TICK_MS = 80;
-const LEVEL1_FOOD_GOAL = 10000;
+
+interface LevelConfig {
+  name: string;
+  emoji: string;
+  baseTick: number;
+  minTick: number;
+  tickAccel: number;
+  foodGoal: number;
+  hasRevival: boolean;
+}
+
+const LEVEL_CONFIGS: LevelConfig[] = [
+  { name: 'Simple',      emoji: '🟢', baseTick: 150, minTick: 100, tickAccel: 2, foodGoal: 10000, hasRevival: false },
+  { name: 'Hard',        emoji: '🟡', baseTick: 120, minTick:  70, tickAccel: 3, foodGoal: 10000, hasRevival: true  },
+  { name: 'Challenging', emoji: '🔴', baseTick:  90, minTick:  50, tickAccel: 4, foodGoal: 10000, hasRevival: true  },
+];
+
+// Persists across resetGame() calls; only resets on game destroy
+let currentLevel = 1;  // 1-indexed
 
 // Human player color (set by createGame options, persists for all rounds)
 let humanBodyColor = 0xe74c3c;
@@ -50,6 +67,59 @@ interface SnakeState {
 }
 
 
+interface Challenge {
+  question: string;
+  choices: string[];
+  correct: number;
+}
+
+const CHALLENGES: Challenge[] = [
+  // Math
+  { question: 'What is 8 × 9?', choices: ['63', '72', '81', '64'], correct: 1 },
+  { question: 'What is √144?', choices: ['11', '12', '13', '14'], correct: 1 },
+  { question: 'What is 15% of 200?', choices: ['25', '30', '35', '40'], correct: 1 },
+  { question: 'What is 2¹⁰?', choices: ['512', '1000', '1024', '2048'], correct: 2 },
+  { question: 'What is 7 × 8?', choices: ['48', '54', '56', '64'], correct: 2 },
+  { question: 'How many degrees in a triangle?', choices: ['90°', '180°', '270°', '360°'], correct: 1 },
+  { question: 'What is 25% of 80?', choices: ['15', '20', '25', '30'], correct: 1 },
+  { question: 'What is 3³?', choices: ['9', '18', '27', '36'], correct: 2 },
+  { question: 'TRUE or FALSE: A square is always a rectangle.', choices: ['TRUE', 'FALSE'], correct: 0 },
+  { question: 'What is the area of a rectangle 8 × 5?', choices: ['30', '35', '40', '45'], correct: 2 },
+  // Science
+  { question: 'What planet is closest to the Sun?', choices: ['Venus', 'Mercury', 'Mars', 'Earth'], correct: 1 },
+  { question: 'What is the powerhouse of the cell?', choices: ['Nucleus', 'Ribosome', 'Mitochondria', 'Vacuole'], correct: 2 },
+  { question: 'What gas do plants absorb?', choices: ['Oxygen', 'Carbon Dioxide', 'Nitrogen', 'Hydrogen'], correct: 1 },
+  { question: 'What force pulls objects toward Earth?', choices: ['Friction', 'Magnetism', 'Gravity', 'Tension'], correct: 2 },
+  { question: 'How many bones in the adult human body?', choices: ['196', '206', '216', '226'], correct: 1 },
+  { question: 'What is H₂O?', choices: ['Salt', 'Water', 'Oxygen', 'Hydrogen'], correct: 1 },
+  { question: 'What is the hardest natural substance?', choices: ['Gold', 'Iron', 'Diamond', 'Quartz'], correct: 2 },
+  { question: 'How many chambers in the human heart?', choices: ['2', '3', '4', '5'], correct: 2 },
+  { question: 'What is the speed of light (approx)?', choices: ['300,000 km/s', '150,000 km/s', '450,000 km/s', '600,000 km/s'], correct: 0 },
+  { question: 'What planet is known as the Red Planet?', choices: ['Venus', 'Mercury', 'Mars', 'Jupiter'], correct: 2 },
+  // English
+  { question: 'What is a noun?', choices: ['An action word', 'A describing word', 'A person, place, or thing', 'A connecting word'], correct: 2 },
+  { question: 'Which word is spelled correctly?', choices: ['Recieve', 'Receive', 'Receve', 'Recieive'], correct: 1 },
+  { question: 'What is the past tense of "run"?', choices: ['Runned', 'Ran', 'Running', 'Runs'], correct: 1 },
+  { question: 'What is a simile?', choices: ['A direct comparison', 'A comparison using "like" or "as"', 'An exaggeration', 'A hidden meaning'], correct: 1 },
+  { question: 'What does "benevolent" mean?', choices: ['Cruel', 'Kind and generous', 'Selfish', 'Lazy'], correct: 1 },
+  { question: 'Which word is a conjunction?', choices: ['Quickly', 'Beautiful', 'And', 'Over'], correct: 2 },
+  { question: 'What is the superlative of "good"?', choices: ['Gooder', 'Better', 'Best', 'Most good'], correct: 2 },
+  { question: 'What is onomatopoeia?', choices: ['An exaggeration', 'Words that sound like what they describe', 'A metaphor', 'A simile'], correct: 1 },
+  { question: 'Which is a metaphor?', choices: ['She is like a star', 'Life is a journey', 'He ran as fast as wind', 'The dog barked'], correct: 1 },
+  { question: 'What does "procrastinate" mean?', choices: ['To work quickly', 'To delay or postpone tasks', 'To study hard', 'To celebrate'], correct: 1 },
+  // History
+  { question: 'Who was the first US President?', choices: ['John Adams', 'George Washington', 'Thomas Jefferson', 'Benjamin Franklin'], correct: 1 },
+  { question: 'In what year did WWII end?', choices: ['1943', '1944', '1945', '1946'], correct: 2 },
+  { question: 'Who painted the Mona Lisa?', choices: ['Michelangelo', 'Raphael', 'Leonardo da Vinci', 'Botticelli'], correct: 2 },
+  { question: 'Which civilization built Machu Picchu?', choices: ['Aztec', 'Maya', 'Inca', 'Olmec'], correct: 2 },
+  { question: 'In what year did WWI begin?', choices: ['1912', '1914', '1916', '1918'], correct: 1 },
+  { question: 'Who discovered penicillin?', choices: ['Louis Pasteur', 'Alexander Fleming', 'Joseph Lister', 'Edward Jenner'], correct: 1 },
+  { question: 'When did Christopher Columbus arrive in the Americas?', choices: ['1488', '1490', '1492', '1494'], correct: 2 },
+  { question: 'Who was Mahatma Gandhi?', choices: ['Indian military general', 'Leader of Indian independence movement', 'Pakistani president', 'British governor'], correct: 1 },
+  { question: 'What year did the Berlin Wall fall?', choices: ['1987', '1988', '1989', '1990'], correct: 2 },
+  { question: 'Which country launched the first human into space?', choices: ['USA', 'UK', 'USSR', 'China'], correct: 2 },
+];
+
 function pickFoodKind(): FoodKind {
   const r = Math.random() * 100;
   if (r < 50) return 'apple';
@@ -62,10 +132,14 @@ function pickFoodKind(): FoodKind {
 class SnakeScene extends Phaser.Scene {
   private snakes: SnakeState[] = [];
   private foods: Food[] = [];
-  private globalTickMs = BASE_TICK_MS;
+  private globalTickMs = LEVEL_CONFIGS[currentLevel - 1].baseTick;
   private elapsed = 0;
   private roundOver = false;
   private humanFoodsEaten = 0;
+  private challengeActive = false;
+  private activeChallenge: Challenge | null = null;
+  private challengeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private usedRevivalThisGame = false;  // Level 3: only 1 revival allowed
   private pointerPos: { x: number; y: number } | null = null;
   private graphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
@@ -199,10 +273,16 @@ class SnakeScene extends Phaser.Scene {
     ];
 
     this.foods = [];
-    this.globalTickMs = BASE_TICK_MS;
+    this.globalTickMs = LEVEL_CONFIGS[currentLevel - 1].baseTick;
     this.elapsed = 0;
     this.roundOver = false;
     this.humanFoodsEaten = 0;
+    this.challengeActive = false;
+    this.usedRevivalThisGame = false;
+    this.activeChallenge = null;
+    if (this.challengeTimeoutId !== null) { clearTimeout(this.challengeTimeoutId); this.challengeTimeoutId = null; }
+    const challengeOverlay = document.getElementById('challenge-overlay');
+    if (challengeOverlay) challengeOverlay.classList.add('hidden');
 
     document.getElementById('retry-btn')?.classList.add('hidden');
 
@@ -215,6 +295,7 @@ class SnakeScene extends Phaser.Scene {
 
     this.updateScoreDisplays();
     this.updatePowerUpHUD();
+    this.updateLevelProgress();
   }
 
   private allBodyCells(): Set<string> {
@@ -443,7 +524,7 @@ class SnakeScene extends Phaser.Scene {
 
     // Accelerate global tick slightly per food eaten
     if (foodsEaten.length > 0) {
-      this.globalTickMs = Math.max(80, this.globalTickMs - 2 * foodsEaten.length);
+      this.globalTickMs = Math.max(LEVEL_CONFIGS[currentLevel - 1].minTick, this.globalTickMs - LEVEL_CONFIGS[currentLevel - 1].tickAccel * foodsEaten.length);
     }
 
     this.updateScoreDisplays();
@@ -454,26 +535,46 @@ class SnakeScene extends Phaser.Scene {
 
   private checkWinCondition(): void {
     if (this.roundOver) return;
+    const cfg = LEVEL_CONFIGS[currentLevel - 1];
     const human = this.snakes[0];
 
-    // Level 1 goal: eat LEVEL1_FOOD_GOAL foods
-    if (this.humanFoodsEaten >= LEVEL1_FOOD_GOAL) {
+    if (this.humanFoodsEaten >= cfg.foodGoal) {
       this.endRound('level-complete', human.score);
       return;
     }
 
     if (!human.alive) {
+      if (cfg.hasRevival && !this.challengeActive) {
+        const level3OnlyOnce = currentLevel === 3 && this.usedRevivalThisGame;
+        if (!level3OnlyOnce) {
+          this.triggerDeathChallenge();
+          return;
+        }
+      }
       this.endRound('lose', human.score);
     }
   }
 
   private endRound(result: 'win' | 'lose' | 'draw' | 'level-complete', score: number): void {
     this.roundOver = true;
+    if (this.challengeActive) {
+      if (this.challengeTimeoutId !== null) { clearTimeout(this.challengeTimeoutId); this.challengeTimeoutId = null; }
+      const overlay = document.getElementById('challenge-overlay');
+      if (overlay) overlay.classList.add('hidden');
+      this.challengeActive = false;
+    }
     this.overlayGraphics.fillStyle(0x000000, 0.65);
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     let msg: string;
     if (result === 'level-complete') {
-      msg = `🎉 Level 2 Unlocked!\nYou ate ${LEVEL1_FOOD_GOAL.toLocaleString()} foods!\nScore: ${score}`;
+      if (currentLevel < LEVEL_CONFIGS.length) {
+        currentLevel++;
+        const next = LEVEL_CONFIGS[currentLevel - 1];
+        msg = `🎉 Level ${currentLevel} Unlocked!\n${next.emoji} ${next.name}\nScore: ${score}`;
+      } else {
+        currentLevel = 1; // reset after mastering
+        msg = `🏆 You mastered Snake IQ Survival!\nScore: ${score}\nRestarting from Level 1…`;
+      }
     } else if (result === 'win') {
       msg = `You Win! 🏆\nScore: ${score}`;
     } else if (result === 'lose') {
@@ -523,11 +624,60 @@ class SnakeScene extends Phaser.Scene {
   }
 
   private updateLevelProgress(): void {
-    const pct = Math.min(100, (this.humanFoodsEaten / LEVEL1_FOOD_GOAL) * 100);
-    const countEl = document.getElementById('foods-eaten-count');
-    const barEl   = document.getElementById('foods-progress-bar');
-    if (countEl) countEl.textContent = `${this.humanFoodsEaten.toLocaleString()} / ${LEVEL1_FOOD_GOAL.toLocaleString()}`;
-    if (barEl)   barEl.style.width = `${pct}%`;
+    const cfg = LEVEL_CONFIGS[currentLevel - 1];
+    const pct = Math.min(100, (this.humanFoodsEaten / cfg.foodGoal) * 100);
+    const countEl   = document.getElementById('foods-eaten-count');
+    const barEl     = document.getElementById('foods-progress-bar');
+    const headingEl = document.getElementById('level-heading');
+    if (countEl)   countEl.textContent   = `${this.humanFoodsEaten.toLocaleString()} / ${cfg.foodGoal.toLocaleString()}`;
+    if (barEl)     barEl.style.width     = `${pct}%`;
+    if (headingEl) headingEl.textContent = `${cfg.emoji} Level ${currentLevel} — ${cfg.name}`;
+  }
+
+  private triggerDeathChallenge(): void {
+    this.challengeActive = true;
+    this.activeChallenge = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
+    const questionEl = document.getElementById('challenge-question');
+    const choicesEl  = document.getElementById('challenge-choices');
+    const overlay    = document.getElementById('challenge-overlay');
+    if (questionEl) questionEl.textContent = this.activeChallenge.question;
+    if (choicesEl) {
+      choicesEl.innerHTML = '';
+      const timerBar = document.getElementById('challenge-timer-bar');
+      if (timerBar) { timerBar.style.animation = 'none'; void timerBar.offsetWidth; timerBar.style.animation = ''; }
+      const challenge = this.activeChallenge;
+      challenge.choices.forEach((choice, idx) => {
+        const btn = document.createElement('button');
+        btn.textContent = choice;
+        const fn: EventListener = () => { if (!this.challengeActive) return; this.resolveDeathChallenge(idx === challenge.correct); };
+        btn.addEventListener('click', fn);
+        this.domListeners.push({ el: btn, event: 'click', fn });
+        choicesEl.appendChild(btn);
+      });
+    }
+    if (overlay) overlay.classList.remove('hidden');
+    this.challengeTimeoutId = setTimeout(() => { if (this.challengeActive) this.resolveDeathChallenge(false); }, 6000);
+  }
+
+  private resolveDeathChallenge(correct: boolean): void {
+    if (!this.challengeActive) return;
+    if (this.challengeTimeoutId !== null) { clearTimeout(this.challengeTimeoutId); this.challengeTimeoutId = null; }
+    this.activeChallenge = null;
+    const overlay = document.getElementById('challenge-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    this.challengeActive = false;
+    const human = this.snakes[0];
+    if (correct) {
+      this.usedRevivalThisGame = true;
+      human.body = [{ x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }];
+      human.direction = 'RIGHT'; human.nextDirection = 'RIGHT';
+      human.alive = true; human.stunnedMs = 0;
+      human.powerUp = { kind: 'none', msRemaining: 0 };
+    } else {
+      this.endRound('lose', human.score);
+    }
+    this.updateScoreDisplays();
+    this.updatePowerUpHUD();
   }
 
   update(_time: number, delta: number): void {
@@ -547,6 +697,11 @@ class SnakeScene extends Phaser.Scene {
 
     if (this.roundOver) {
       if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) this.resetGame();
+      this.draw();
+      return;
+    }
+
+    if (this.challengeActive) {
       this.draw();
       return;
     }
@@ -592,7 +747,7 @@ class SnakeScene extends Phaser.Scene {
     while (this.elapsed >= tickMs) {
       this.elapsed -= tickMs;
       this.tick();
-      if (this.roundOver) break;
+      if (this.roundOver || this.challengeActive) break;
     }
 
     this.draw();
@@ -787,6 +942,10 @@ class SnakeScene extends Phaser.Scene {
   }
 
   shutdown(): void {
+    if (this.challengeTimeoutId !== null) { clearTimeout(this.challengeTimeoutId); this.challengeTimeoutId = null; }
+    const overlay = document.getElementById('challenge-overlay');
+    if (overlay) overlay.classList.add('hidden');
+    this.challengeActive = false;
     for (const { el, event, fn } of this.domListeners) {
       el.removeEventListener(event, fn);
     }
