@@ -4,9 +4,9 @@ test.describe('app browser smoke test', () => {
   test('renders the main page and about panel', async ({ page }) => {
     await page.goto('./');
 
-    await expect(page).toHaveTitle(/Snake IQ Survival/i);
+    await expect(page).toHaveTitle(/Venom Arena/i);
     await expect(page.locator('#start-screen')).toBeVisible();
-    await expect(page.locator('#start-title')).toHaveText('Snake IQ Survival');
+    await expect(page.locator('#start-title')).toHaveText('Venom Arena');
     await expect(page.locator('#start-button')).toHaveText('Start Game');
     await expect(page.locator('#start-about-button')).toHaveText('About');
 

@@ -177,30 +177,8 @@ class SnakeScene extends Phaser.Scene {
   private domListeners: Array<{ el: Element; event: string; fn: EventListener }> = [];
   private tonguePhase = 0;
 
-  // Grass field — generated once, drawn every frame
-  private readonly grassPatch: Uint8Array;
-  private readonly grassBlades: Array<{ x: number; y: number; h: number; lean: number; color: number }>;
-
   constructor() {
     super({ key: 'SnakeScene' });
-
-    // Pre-generate grass patches (per cell) and blade positions
-    this.grassPatch = new Uint8Array(COLS * ROWS);
-    for (let i = 0; i < this.grassPatch.length; i++) {
-      this.grassPatch[i] = Math.floor(Math.random() * 3); // 0 = base, 1 = light, 2 = dark
-    }
-
-    this.grassBlades = [];
-    const BLADE_COLORS = [0x0f2d06, 0x163808, 0x1a4a0a, 0x0a2004];
-    for (let i = 0; i < 720; i++) {
-      this.grassBlades.push({
-        x: Math.random() * CANVAS_W,
-        y: Math.random() * CANVAS_H,
-        h: 5 + Math.random() * 8,
-        lean: (Math.random() - 0.5) * 0.8,
-        color: BLADE_COLORS[Math.floor(Math.random() * BLADE_COLORS.length)],
-      });
-    }
   }
 
   create(): void {
@@ -896,30 +874,9 @@ class SnakeScene extends Phaser.Scene {
     const g = this.graphics;
     g.clear();
 
-    // Grass background
-    // Base layer – dark green
-    g.fillStyle(0x1a4a0a);
+    // Black background
+    g.fillStyle(0x000000);
     g.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-    // Per-cell shade patches for natural variation
-    const PATCH_COLORS = [0x1a4a0a, 0x215c0d, 0x143a08];
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const shade = this.grassPatch[row * COLS + col];
-        if (shade !== 0) {
-          g.fillStyle(PATCH_COLORS[shade], 0.45);
-          g.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-        }
-      }
-    }
-
-    // Grass blades – thin triangles
-    for (const b of this.grassBlades) {
-      g.fillStyle(b.color, 0.75);
-      const tipX = b.x + b.lean * b.h;
-      const tipY = b.y - b.h;
-      g.fillTriangle(b.x - 1.5, b.y, b.x + 1.5, b.y, tipX, tipY);
-    }
 
     // Food
     for (const food of this.foods) {
@@ -939,7 +896,7 @@ class SnakeScene extends Phaser.Scene {
         case 'shield':
           g.fillStyle(0x00cec9);
           g.fillRect(food.x * CELL_SIZE + 2, food.y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
-          g.fillStyle(0x143a08);
+          g.fillStyle(0x000000);
           g.fillRect(food.x * CELL_SIZE + 6, food.y * CELL_SIZE + 6, CELL_SIZE - 12, CELL_SIZE - 12);
           break;
         case 'skull':
@@ -983,7 +940,7 @@ export function createGame(opts: { bodyColor?: number; headColor?: number; mode?
     width: CANVAS_W,
     height: CANVAS_H,
     parent: 'game-root',
-    backgroundColor: '#1a4a0a',
+    backgroundColor: '#000000',
     scene: SnakeScene,
     scale: {
       mode: Phaser.Scale.FIT,

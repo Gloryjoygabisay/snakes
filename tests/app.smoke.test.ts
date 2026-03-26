@@ -31,7 +31,7 @@ describe('app bootstrap smoke test', () => {
   it('renders the start screen and wires core UI actions', async () => {
     await import('../src/main');
 
-    expect(document.getElementById('start-title')?.textContent).toBe('Snake IQ Survival');
+    expect(document.getElementById('start-title')?.textContent).toBe('Venom Arena');
     expect(document.getElementById('start-button')?.textContent).toBe('Play Game');
     // check p1-score exists in HTML
     expect(document.getElementById('p1-score')).not.toBeNull();
