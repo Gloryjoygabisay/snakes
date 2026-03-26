@@ -11,20 +11,28 @@
     <!-- ── Start screen ─────────────────────────────────────── -->
     <div id="start-screen">
 
-      <!-- Animated snake background -->
-      <div class="snake-bg" aria-hidden="true">
-        <div class="bg-sn s1"></div>
-        <div class="bg-sn s2"></div>
-        <div class="bg-sn s3"></div>
-        <div class="bg-sn s4"></div>
-        <div class="bg-sn s5"></div>
-        <div class="bg-sn s6"></div>
-        <div class="bg-sn s7"></div>
-        <div class="bg-sn s8"></div>
-      </div>
+      <!-- Real canvas-drawn animated snakes as background -->
+      <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
       <h1 id="start-title">Snake Arena: Logic Survival</h1>
       <p id="start-blurb">Navigate the arena, eat power foods, and outlast 3 AI snakes. Die and get a second chance — answer a logic question to revive! 🧠🐍</p>
-      <button id="start-button" class="primary-button">Start Game</button>
+
+      <!-- Color picker -->
+      <div id="color-picker">
+        <p id="color-label">🎨 Choose your snake color</p>
+        <div id="color-swatches">
+          <button class="color-swatch selected" data-body="#e74c3c" data-head="#ff6b6b" title="Red"     style="--c:#e74c3c"></button>
+          <button class="color-swatch"          data-body="#3498db" data-head="#74b9ff" title="Blue"    style="--c:#3498db"></button>
+          <button class="color-swatch"          data-body="#00b894" data-head="#55efc4" title="Green"   style="--c:#00b894"></button>
+          <button class="color-swatch"          data-body="#e17055" data-head="#fab1a0" title="Orange"  style="--c:#e17055"></button>
+          <button class="color-swatch"          data-body="#d4ac0d" data-head="#f1c40f" title="Yellow"  style="--c:#d4ac0d"></button>
+          <button class="color-swatch"          data-body="#6c5ce7" data-head="#a29bfe" title="Purple"  style="--c:#6c5ce7"></button>
+          <button class="color-swatch"          data-body="#e84393" data-head="#fd79a8" title="Pink"    style="--c:#e84393"></button>
+          <button class="color-swatch"          data-body="#00cec9" data-head="#81ecec" title="Cyan"    style="--c:#00cec9"></button>
+        </div>
+      </div>
+
+      <button id="start-button" class="primary-button">Play Game</button>
       <div id="start-about-button-wrap">
         <button id="start-about-button" class="secondary-button">About</button>
       </div>

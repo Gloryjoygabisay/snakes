@@ -32,7 +32,7 @@ describe('app bootstrap smoke test', () => {
     await import('../src/main');
 
     expect(document.getElementById('start-title')?.textContent).toBe('Snake Arena: Logic Survival');
-    expect(document.getElementById('start-button')?.textContent).toBe('Start Game');
+    expect(document.getElementById('start-button')?.textContent).toBe('Play Game');
     // check p1-score exists in HTML
     expect(document.getElementById('p1-score')).not.toBeNull();
     expect(document.getElementById('challenge-overlay')).not.toBeNull();

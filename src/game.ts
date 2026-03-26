@@ -11,6 +11,10 @@ const FOOD_COUNT = 3;
 const BASE_TICK_MS = 150;
 const SPEED_BOOST_TICK_MS = 80;
 
+// Human player color (set by createGame options, persists for all rounds)
+let humanBodyColor = 0xe74c3c;
+let humanHeadColor = 0xff6b6b;
+
 type Direction = 'RIGHT' | 'LEFT' | 'UP' | 'DOWN';
 interface Point { x: number; y: number; }
 
@@ -150,7 +154,7 @@ class SnakeScene extends Phaser.Scene {
         body: [{ x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }],
         direction: 'RIGHT', nextDirection: 'RIGHT',
         alive: true, score: 0,
-        bodyColor: 0xe74c3c, headColor: 0xff6b6b,
+        bodyColor: humanBodyColor, headColor: humanHeadColor,
         isHuman: true,
         powerUp: { kind: 'none', msRemaining: 0 },
         stunnedMs: 0,
@@ -878,7 +882,9 @@ class SnakeScene extends Phaser.Scene {
   }
 }
 
-export function createGame(): GameController {
+export function createGame(opts: { bodyColor?: number; headColor?: number } = {}): GameController {
+  if (opts.bodyColor !== undefined) humanBodyColor = opts.bodyColor;
+  if (opts.headColor !== undefined) humanHeadColor = opts.headColor;
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     width: CANVAS_W,
