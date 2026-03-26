@@ -136,31 +136,6 @@ html, body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #00ff88;
-  text-shadow:
-    0 0 8px #00ff88,
-    0 0 20px #00ff88,
-    0 0 40px #00cc66,
-    0 0 80px #009944;
-  animation: venom-pulse 2s ease-in-out infinite;
-}
-
-@keyframes venom-pulse {
-  0%, 100% {
-    text-shadow:
-      0 0 8px #00ff88,
-      0 0 20px #00ff88,
-      0 0 40px #00cc66,
-      0 0 80px #009944;
-    opacity: 1;
-  }
-  50% {
-    text-shadow:
-      0 0 16px #00ff88,
-      0 0 40px #00ff88,
-      0 0 80px #00cc66,
-      0 0 160px #009944;
-    opacity: 0.85;
-  }
 }
 
 #start-blurb {
