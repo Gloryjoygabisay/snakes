@@ -440,6 +440,26 @@ kbd {
 #retry-btn:hover { opacity: 0.88; }
 #retry-btn:active { transform: scale(0.96); }
 
+#next-level-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.75rem auto;
+  padding: 0.85rem 3rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #f9c74f, #f8961e);
+  color: #000;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 24px rgba(249, 199, 79, 0.5);
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+#next-level-btn:hover { opacity: 0.88; }
+#next-level-btn:active { transform: scale(0.96); }
+
 /* ============================================================
    Touch controls (legacy class kept for compat)
    ============================================================ */

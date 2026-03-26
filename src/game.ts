@@ -1687,7 +1687,7 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   // ── Round end ──────────────────────────────────────────────────────────────
-  private showEndOverlay(msg: string): void {
+  private showEndOverlay(msg: string, showNextLevel: boolean): void {
     this.roundOver = true;
     this.snakeTickTimer?.remove();
     this.dismissSusieOffer();
@@ -1697,11 +1697,17 @@ class VenomArenaScene extends Phaser.Scene {
     this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     this.overlayText.setText(msg);
 
-    document.getElementById('retry-btn')?.classList.remove('hidden');
+    if (showNextLevel) {
+      document.getElementById('next-level-btn')?.classList.remove('hidden');
+      document.getElementById('retry-btn')?.classList.add('hidden');
+    } else {
+      document.getElementById('retry-btn')?.classList.remove('hidden');
+      document.getElementById('next-level-btn')?.classList.add('hidden');
+    }
   }
 
   private gameOver(): void {
-    this.showEndOverlay(`💀 Game Over!\nScore: ${this.score}`);
+    this.showEndOverlay(`💀 Game Over!\nScore: ${this.score}`, false);
   }
 
   private winGame(): void {
@@ -1709,11 +1715,12 @@ class VenomArenaScene extends Phaser.Scene {
     this.score = Math.floor((this.survivalMs / 1000) * config.scoreMultiplier);
     this.updateDOM();
     window.dispatchEvent(new CustomEvent('snake-level-complete', { detail: { mode: gameMode, level: gameLevel } }));
-    this.showEndOverlay(`🏆 You Survived!\nScore: ${this.score}`);
+    this.showEndOverlay(`🏆 You Survived!\nScore: ${this.score}`, true);
   }
 
   private resetGame(): void {
     document.getElementById('retry-btn')?.classList.add('hidden');
+    document.getElementById('next-level-btn')?.classList.add('hidden');
     document.getElementById('challenge-overlay')?.classList.add('hidden');
     this.overlayText.setText('');
     this.overlayGraphics.clear();

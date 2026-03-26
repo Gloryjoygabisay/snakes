@@ -195,12 +195,30 @@ document.getElementById('menu-button')?.addEventListener('click', () => {
   gameController?.destroy();
   gameController = null;
   gameShell?.classList.add('hidden');
+  document.getElementById('retry-btn')?.classList.add('hidden');
+  document.getElementById('next-level-btn')?.classList.add('hidden');
   showModeSelect();
 });
 
-// Retry
+// Retry (same level on death)
 document.getElementById('retry-btn')?.addEventListener('click', () => {
   window.dispatchEvent(new CustomEvent('snake-retry'));
+});
+
+// Next Level (advance after winning)
+const MODE_MAX_LEVELS: Record<GameMode, number> = { explorer: 5, survivor: 10, legend: 15 };
+document.getElementById('next-level-btn')?.addEventListener('click', () => {
+  const maxLevel = MODE_MAX_LEVELS[selectedMode];
+  if (selectedLevel < maxLevel) {
+    selectedLevel += 1;
+    void startGame();
+  } else {
+    // Last level of mode complete — go back to mode select
+    gameController?.destroy();
+    gameController = null;
+    gameShell?.classList.add('hidden');
+    showModeSelect();
+  }
 });
 
 // About
