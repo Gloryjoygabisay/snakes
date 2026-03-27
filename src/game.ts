@@ -458,7 +458,7 @@ class VenomArenaScene extends Phaser.Scene {
   private joystickActive = false;
   private dragDir: { dx: number; dy: number } | null = null;
   private gloryTrail: Array<{x: number; y: number}> = [];
-  private gloryTrailMax = 2;  // starts small, grows as apples are eaten
+  private gloryTrailMax = 6;  // starts with a short body, grows as apples are eaten
 
   private snakeTickTimer: Phaser.Time.TimerEvent | null = null;
 
@@ -549,7 +549,7 @@ class VenomArenaScene extends Phaser.Scene {
       invincibleMs: 0,
     };
     this.gloryTrail = [];
-    this.gloryTrailMax = 2;  // reset to tiny at start of each level
+    this.gloryTrailMax = 6;  // reset to short body at start of each level
 
     this.snakes = [];
     for (let i = 0; i < config.snakeCount; i++) {
@@ -2042,48 +2042,17 @@ class VenomArenaScene extends Phaser.Scene {
 
     const alpha = this.hiddenInBush ? 0.35 : 1.0;
     const trail = this.gloryTrail.length > 0 ? this.gloryTrail : [{ x, y }];
-
-    // Body color: golden python — distinct from enemy snakes
-    const bodyColor  = invincibleMs > 0 ? 0xff6633 : 0xd4a017;
-    const bellyColor = invincibleMs > 0 ? 0xffaa66 : 0xf5e08a;
-    const scaleColor = invincibleMs > 0 ? 0xcc4400 : 0x8b6800;
-    const eyeColor   = 0xff4400;
-
-    // Draw body segments from tail to neck (so head is on top)
     const totalSegs = Math.min(trail.length, this.gloryTrailMax);
-    for (let i = totalSegs - 1; i >= 1; i--) {
-      const seg = trail[i];
-      const t = i / this.gloryTrailMax;
-      const radius = 10 * (1 - t * 0.5);
 
-      this.topGraphics.fillStyle(bodyColor, alpha * (1 - t * 0.3));
-      this.topGraphics.fillCircle(seg.x, seg.y, radius);
+    // Color palette: golden ball-python inspired
+    const bodyColor   = invincibleMs > 0 ? 0xff6633 : 0xc8960c; // rich dark gold
+    const saddleColor = invincibleMs > 0 ? 0x882200 : 0x4a2800; // dark brown saddle marks
+    const midBandColor = invincibleMs > 0 ? 0xff9944 : 0xe8b020; // lighter mid-band gold
+    const bellyColor  = invincibleMs > 0 ? 0xffcc88 : 0xf0dc82; // pale yellow belly
+    const tongueColor = 0xdd1144;
 
-      if (i % 2 === 0) {
-        this.topGraphics.fillStyle(scaleColor, alpha * 0.4 * (1 - t * 0.3));
-        this.topGraphics.fillCircle(seg.x, seg.y, radius * 0.6);
-      }
-
-      this.topGraphics.fillStyle(bellyColor, alpha * 0.3 * (1 - t * 0.5));
-      this.topGraphics.fillCircle(seg.x - 1, seg.y - 1, radius * 0.45);
-    }
-
-    // Gap-fill between trail points
-    for (let i = 0; i < totalSegs - 1; i++) {
-      const a = trail[i];
-      const b = trail[i + 1];
-      const t = i / this.gloryTrailMax;
-      const r = 9 * (1 - t * 0.5);
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2;
-      this.topGraphics.fillStyle(bodyColor, alpha * (1 - t * 0.3) * 0.7);
-      this.topGraphics.fillCircle(mx, my, r);
-    }
-
-    // HEAD
-    const headRadius = 11;
-    let headDx = 0;
-    let headDy = -1;
+    // ── Head direction ──────────────────────────────────────────
+    let headDx = 0, headDy = -1;
     if (this.dragDir) {
       headDx = this.dragDir.dx;
       headDy = this.dragDir.dy;
@@ -2093,57 +2062,140 @@ class VenomArenaScene extends Phaser.Scene {
       const len = Math.hypot(dx, dy);
       if (len > 0.5) { headDx = dx / len; headDy = dy / len; }
     }
-
-    this.topGraphics.fillStyle(bodyColor, alpha);
-    this.topGraphics.fillCircle(x, y, headRadius);
-
-    this.topGraphics.fillStyle(scaleColor, alpha * 0.5);
-    this.topGraphics.fillCircle(x, y, headRadius * 0.65);
-
-    const snoutX = x + headDx * 7;
-    const snoutY = y + headDy * 7;
-    this.topGraphics.fillStyle(bodyColor, alpha);
-    this.topGraphics.fillEllipse(snoutX, snoutY, 10, 8);
-
     const perpX = -headDy;
     const perpY =  headDx;
-    const eyeOffFwd = 3;
-    const eyeOffSide = 5;
+
+    // ── Body (tail → neck, back-to-front) ───────────────────────
+    for (let i = totalSegs - 1; i >= 1; i--) {
+      const seg = trail[i];
+      // Taper: thicker near neck, thin at tail tip (real-snake-like)
+      const t = i / Math.max(totalSegs - 1, 1); // 0 = tail, 1 = neck
+      const bodyR = 4 + 7 * t;                   // radius 4→11
+
+      // Fill gaps between consecutive segments to keep body continuous
+      if (i < totalSegs - 1) {
+        const next = trail[i + 1];
+        const tNext = (i + 1) / Math.max(totalSegs - 1, 1);
+        const midR  = 4 + 7 * ((t + tNext) / 2);
+        this.topGraphics.fillStyle(bodyColor, alpha);
+        this.topGraphics.fillCircle((seg.x + next.x) / 2, (seg.y + next.y) / 2, midR);
+      }
+
+      // Main body circle
+      this.topGraphics.fillStyle(bodyColor, alpha);
+      this.topGraphics.fillCircle(seg.x, seg.y, bodyR);
+
+      // Saddle / dorsal markings (alternating dark patches — ball python pattern)
+      if (i % 4 === 0) {
+        this.topGraphics.fillStyle(saddleColor, alpha * 0.75);
+        this.topGraphics.fillEllipse(seg.x, seg.y, bodyR * 1.6, bodyR * 0.9);
+      } else if (i % 4 === 2) {
+        this.topGraphics.fillStyle(midBandColor, alpha * 0.6);
+        this.topGraphics.fillEllipse(seg.x, seg.y, bodyR * 1.3, bodyR * 0.75);
+      }
+
+      // Belly scute: wide pale band across the ventral side
+      this.topGraphics.fillStyle(bellyColor, alpha * 0.55);
+      this.topGraphics.fillEllipse(seg.x, seg.y, bodyR * 1.7, bodyR * 0.55);
+
+      // Subtle lateral ridge line (highlight along the side)
+      this.topGraphics.fillStyle(midBandColor, alpha * 0.3);
+      this.topGraphics.fillCircle(seg.x + perpX * bodyR * 0.7, seg.y + perpY * bodyR * 0.7, bodyR * 0.28);
+      this.topGraphics.fillCircle(seg.x - perpX * bodyR * 0.7, seg.y - perpY * bodyR * 0.7, bodyR * 0.28);
+    }
+
+    // ── Head ────────────────────────────────────────────────────
+    const headR    = 12;
+    const snoutFwd = 9;  // how far the snout protrudes forward
+
+    // Skull (slightly wider than body, back of head)
+    this.topGraphics.fillStyle(bodyColor, alpha);
+    this.topGraphics.fillEllipse(
+      x - headDx * 3,
+      y - headDy * 3,
+      headR * 2.5,
+      headR * 2.0
+    );
+
+    // Snout (narrower, forward-pointing)
+    this.topGraphics.fillStyle(bodyColor, alpha);
+    this.topGraphics.fillEllipse(
+      x + headDx * snoutFwd,
+      y + headDy * snoutFwd,
+      headR * 1.6,
+      headR * 1.2
+    );
+
+    // Dark dorsal saddle on top of head
+    this.topGraphics.fillStyle(saddleColor, alpha * 0.65);
+    this.topGraphics.fillEllipse(x - headDx * 1, y - headDy * 1, headR * 2.2, headR * 0.8);
+
+    // Mid-band highlight stripe on head
+    this.topGraphics.fillStyle(midBandColor, alpha * 0.45);
+    this.topGraphics.fillEllipse(x + headDx * 3, y + headDy * 3, headR * 1.5, headR * 0.5);
+
+    // Chin / jaw belly plate (pale yellow)
+    this.topGraphics.fillStyle(bellyColor, alpha * 0.6);
+    this.topGraphics.fillEllipse(x + headDx * 2, y + headDy * 2, headR * 1.8, headR * 0.65);
+
+    // ── Eyes ────────────────────────────────────────────────────
+    const eyeOffFwd  = headR * 0.45;
+    const eyeOffSide = headR * 0.62;
     const eyeLX = x + headDx * eyeOffFwd + perpX * eyeOffSide;
     const eyeLY = y + headDy * eyeOffFwd + perpY * eyeOffSide;
     const eyeRX = x + headDx * eyeOffFwd - perpX * eyeOffSide;
     const eyeRY = y + headDy * eyeOffFwd - perpY * eyeOffSide;
 
-    this.topGraphics.fillStyle(0xffee88, alpha);
-    this.topGraphics.fillCircle(eyeLX, eyeLY, 3.5);
-    this.topGraphics.fillCircle(eyeRX, eyeRY, 3.5);
+    // Sclera (creamy white)
+    this.topGraphics.fillStyle(0xfff4cc, alpha);
+    this.topGraphics.fillCircle(eyeLX, eyeLY, 4.2);
+    this.topGraphics.fillCircle(eyeRX, eyeRY, 4.2);
 
-    this.topGraphics.fillStyle(eyeColor, alpha);
-    this.topGraphics.fillEllipse(eyeLX, eyeLY, 2.5, 3.5);
-    this.topGraphics.fillEllipse(eyeRX, eyeRY, 2.5, 3.5);
+    // Gold/amber iris (python eyes are a warm gold)
+    this.topGraphics.fillStyle(0xcc8800, alpha);
+    this.topGraphics.fillCircle(eyeLX, eyeLY, 3.2);
+    this.topGraphics.fillCircle(eyeRX, eyeRY, 3.2);
 
-    this.topGraphics.fillStyle(0xffffff, alpha * 0.8);
-    this.topGraphics.fillCircle(eyeLX - 0.8, eyeLY - 0.8, 1.2);
-    this.topGraphics.fillCircle(eyeRX - 0.8, eyeRY - 0.8, 1.2);
+    // Vertical slit pupil (pythons have elliptical pupils)
+    this.topGraphics.fillStyle(0x0d0500, alpha);
+    this.topGraphics.fillEllipse(eyeLX + headDx * 0.4, eyeLY + headDy * 0.4, 1.8, 4.0);
+    this.topGraphics.fillEllipse(eyeRX + headDx * 0.4, eyeRY + headDy * 0.4, 1.8, 4.0);
 
-    // Tongue (flicker)
+    // Eye highlight (specular glint)
+    this.topGraphics.fillStyle(0xffffff, alpha * 0.9);
+    this.topGraphics.fillCircle(eyeLX - headDx * 0.6 + perpX * 0.8, eyeLY - headDy * 0.6 + perpY * 0.8, 1.1);
+    this.topGraphics.fillCircle(eyeRX - headDx * 0.6 - perpX * 0.8, eyeRY - headDy * 0.6 - perpY * 0.8, 1.1);
+
+    // ── Nostrils ─────────────────────────────────────────────────
+    const nostrilFwd = snoutFwd + 5;  // offset past snout tip to place nostril dots
+    const nostrilSide = 2.2;          // lateral separation between the two nostrils
+    this.topGraphics.fillStyle(saddleColor, alpha * 0.9);
+    this.topGraphics.fillCircle(x + headDx * nostrilFwd + perpX * nostrilSide, y + headDy * nostrilFwd + perpY * nostrilSide, 1.3);
+    this.topGraphics.fillCircle(x + headDx * nostrilFwd - perpX * nostrilSide, y + headDy * nostrilFwd - perpY * nostrilSide, 1.3);
+
+    // ── Tongue (forked, flickers) ────────────────────────────────
     if (Math.floor(this.tongueTimer / 700) % 3 !== 2) {
-      const tongueBase = 0.6;
-      const tx = x + headDx * (headRadius + 4);
-      const ty = y + headDy * (headRadius + 4);
-      this.topGraphics.lineStyle(1.5, 0xff8800, alpha * 0.9);
+      const tBase        = headR + snoutFwd - 1;
+      const t0x          = x + headDx * tBase;
+      const t0y          = y + headDy * tBase;
+      const tLen         = 9;
+      const fLen         = 5;
+      const forkSep      = 3.5;  // lateral spread of each tongue fork tip
+      const t1x          = t0x + headDx * tLen;
+      const t1y          = t0y + headDy * tLen;
+      this.topGraphics.lineStyle(1.8, tongueColor, alpha);
       this.topGraphics.beginPath();
-      this.topGraphics.moveTo(x + headDx * headRadius, y + headDy * headRadius);
-      this.topGraphics.lineTo(tx, ty);
+      this.topGraphics.moveTo(t0x, t0y);
+      this.topGraphics.lineTo(t1x, t1y);
       this.topGraphics.strokePath();
-      this.topGraphics.lineStyle(1, 0xff8800, alpha * 0.8);
+      this.topGraphics.lineStyle(1.5, tongueColor, alpha * 0.9);
       this.topGraphics.beginPath();
-      this.topGraphics.moveTo(tx, ty);
-      this.topGraphics.lineTo(tx + headDx * 4 * tongueBase + perpX * 3, ty + headDy * 4 * tongueBase + perpY * 3);
+      this.topGraphics.moveTo(t1x, t1y);
+      this.topGraphics.lineTo(t1x + headDx * fLen + perpX * forkSep, t1y + headDy * fLen + perpY * forkSep);
       this.topGraphics.strokePath();
       this.topGraphics.beginPath();
-      this.topGraphics.moveTo(tx, ty);
-      this.topGraphics.lineTo(tx + headDx * 4 * tongueBase - perpX * 3, ty + headDy * 4 * tongueBase - perpY * 3);
+      this.topGraphics.moveTo(t1x, t1y);
+      this.topGraphics.lineTo(t1x + headDx * fLen - perpX * forkSep, t1y + headDy * fLen - perpY * forkSep);
       this.topGraphics.strokePath();
     }
 
