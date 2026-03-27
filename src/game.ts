@@ -68,17 +68,26 @@ interface LevelConfig {
 }
 
 const LEVEL_CONFIGS: LevelConfig[] = [
-  // Level 1: Mountain Path — wide, straight, no enemies
+  // Level 1: Mountain Path — Z-shaped winding cliff trail (learn controls)
   {
     name: 'Mountain Path',
-    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.4, lives: 3, scoreMultiplier: 1, fogOfWar: false,
     walls: [
-      ...hwall(8,  2, 29), ...hwall(16, 2, 29),
+      // Upper segment — horizontal corridor rows 5-8 (walls top row4, bottom row9)
+      ...hwall(4,  1, 19),   // top wall:    row 4,  cols 1-19
+      ...hwall(9,  1, 15),   // bottom wall: row 9,  cols 1-15 (gap at 16-19 for turn)
+      // Connector — vertical corridor cols 17-19 (walls right col20, left col16)
+      ...vwall(20, 5, 17),   // right wall:  col 20, rows 5-17
+      ...vwall(16, 10, 17),  // left wall:   col 16, rows 10-17
+      // Lower segment — horizontal corridor rows 19-21 (walls top row18, bottom row22)
+      ...hwall(18, 20, 31),  // top wall:    row 18, cols 20-31 (gap at 16-19 = connector entry)
+      ...hwall(22, 16, 31),  // bottom wall: row 22, cols 16-31
+      ...vwall(16, 19, 21),  // left wall:   col 16, rows 19-21
     ],
     poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 2, row: 12 },
-    exitZone:   { col: 30, row: 12 },
-    collectibles: [[8,12],[16,12],[24,12]] as [number,number][],
+    gloryStart: { col: 2,  row: 6  },
+    exitZone:   { col: 29, row: 20 },
+    collectibles: [[8, 6], [18, 13], [25, 20]] as [number,number][],
     bushes: [],
   },
   // Level 2: Narrow Trail — thinner path, more curves, no enemies
@@ -1348,132 +1357,227 @@ class VenomArenaScene extends Phaser.Scene {
   private drawLevel1Background(): void {
     const g = this.bgGraphics;
 
-    // ── Sky (light blue, full canvas) ────────────────────────────────
-    g.fillStyle(0xa8d8f0);
-    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
-    // Lighter horizon glow
-    g.fillStyle(0xd4ecf8, 0.45);
-    g.fillRect(0, 90, CANVAS_W, 80);
+    // Key pixel positions for Z-path walls:
+    //   Upper corridor: rows 5-8  (walls at row 4 top, row 9 bottom)
+    //   Connector:      cols 17-19 (walls at col 20 right, col 16 left)
+    //   Lower corridor: rows 19-21 (walls at row 18 top, row 22 bottom)
+    const upTopY = 4  * CELL_SIZE;  // 80
+    const upBotY = 9  * CELL_SIZE;  // 180
+    const loTopY = 18 * CELL_SIZE;  // 360
+    const loBotY = 22 * CELL_SIZE;  // 440
+    const connLX = 16 * CELL_SIZE;  // 320
+    const connRX = 20 * CELL_SIZE;  // 400
 
-    // ── 3 soft fluffy clouds ─────────────────────────────────────────
+    // ── 1. Full canvas base: rocky cliff colour ───────────────────────
+    g.fillStyle(0x4a3c2a);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // ── 2. Sky area (above upper segment + right column) ─────────────
+    g.fillStyle(0x8fd3f0);
+    g.fillRect(0, 0, CANVAS_W, upTopY + 20);
+    // Lighter horizon band
+    g.fillStyle(0xc2e8f8, 0.45);
+    g.fillRect(0, 15, CANVAS_W, upTopY);
+
+    // 3 soft clouds
     const cloud = (cx: number, cy: number, s: number) => {
       g.fillStyle(0xffffff, 0.84);
-      g.fillEllipse(cx,          cy,          58 * s, 22 * s);
-      g.fillEllipse(cx - 18 * s, cy +  5 * s, 34 * s, 17 * s);
-      g.fillEllipse(cx + 18 * s, cy +  5 * s, 38 * s, 18 * s);
-      g.fillEllipse(cx,          cy -  9 * s, 28 * s, 15 * s);
+      g.fillEllipse(cx,          cy,          56 * s, 20 * s);
+      g.fillEllipse(cx - 17 * s, cy +  5 * s, 33 * s, 16 * s);
+      g.fillEllipse(cx + 17 * s, cy +  4 * s, 36 * s, 17 * s);
+      g.fillEllipse(cx,          cy -  8 * s, 25 * s, 13 * s);
     };
-    cloud(105, 38, 0.88);
-    cloud(375, 24, 1.05);
-    cloud(555, 50, 0.72);
+    cloud(80,  28, 0.80);
+    cloud(295, 18, 1.00);
+    cloud(510, 34, 0.75);
 
-    // ── Soft mountain silhouette (muted lavender-grey) ───────────────
-    g.fillStyle(0xb8b0cc, 0.52);
-    g.fillEllipse(75,  172, 265, 115);
-    g.fillEllipse(262, 155, 308, 130);
-    g.fillEllipse(492, 162, 248, 105);
-    g.fillStyle(0xd0c8de, 0.32);
-    g.fillEllipse(198, 145, 168, 80);
-    g.fillEllipse(418, 140, 192, 82);
-    // Snow caps
-    g.fillStyle(0xffffff, 0.40);
-    g.fillEllipse(262, 132, 90, 28);
-    g.fillEllipse(492, 130, 72, 22);
+    // Soft mountain silhouettes behind upper segment
+    g.fillStyle(0xb0a8c0, 0.48);
+    g.fillEllipse(100,  upTopY + 14, 230,  96);
+    g.fillEllipse(315,  upTopY +  4, 270, 110);
+    g.fillEllipse(530,  upTopY + 16, 210,  92);
+    g.fillStyle(0xd0c8de, 0.30);
+    g.fillEllipse(205, upTopY -  4, 152, 66);
+    g.fillEllipse(435, upTopY -  6, 168, 68);
+    // Snow caps on two tallest mountains
+    g.fillStyle(0xffffff, 0.38);
+    g.fillEllipse(315, upTopY - 8,  82, 24);
+    g.fillEllipse(530, upTopY - 2,  64, 18);
 
-    // ── Green ground — above path strip ──────────────────────────────
-    // y 0-160 below sky (behind mountain) already sky colour
-    // Just add a narrow grass strip at the fence top
-    g.fillStyle(0x4da834);
-    g.fillRect(0, 150, CANVAS_W, 12);
-    g.fillStyle(0x62c040, 0.5);
-    g.fillRect(0, 145, CANVAS_W, 8);
-
-    // ── Path (wide beige/sandy band, y 160-340) ───────────────────────
-    // Row 8 = y 160 (top fence), row 16 = y 320 (bottom fence)
-    g.fillStyle(0xead9a2);
-    g.fillRect(0, 160, CANVAS_W, 180);
-    // Subtle centre highlight stripe
-    g.fillStyle(0xf4e9bc, 0.40);
-    g.fillRect(0, 225, CANVAS_W, 30);
-    // Shadow edges near fences
-    g.fillStyle(0xc4a860, 0.20);
-    g.fillRect(0, 160, CANVAS_W, 22);
-    g.fillRect(0, 298, CANVAS_W, 22);
-    // Faint trail marks (two subtle ruts)
-    g.fillStyle(0xc8b070, 0.18);
-    for (let tx = 0; tx < CANVAS_W; tx += 22) {
-      g.fillRect(tx, 215, 14, 3);
-      g.fillRect(tx + 8, 265, 14, 3);
+    // ── 3. Cliff texture (non-path areas) ────────────────────────────
+    // Left-middle cliff (x=0-connLX, y=upBotY-loTopY) — below upper, beside connector
+    g.fillStyle(0x3e3020);
+    g.fillRect(0, upBotY, connLX, loTopY - upBotY);
+    // Rock strata lines
+    g.fillStyle(0x2e2416, 0.55);
+    for (let ry = upBotY + 14; ry < loTopY; ry += 20) {
+      const rw = connLX * (0.5 + 0.4 * ((ry % 40) / 40));
+      g.fillRect(0, ry, rw, 5);
+    }
+    // Lighter strata highlight
+    g.fillStyle(0x6a5438, 0.22);
+    for (let ry = upBotY + 5; ry < loTopY; ry += 20) {
+      g.fillRect(0, ry, connLX * 0.6, 3);
     }
 
-    // ── Green ground — below path ─────────────────────────────────────
-    g.fillStyle(0x3d8028);
-    g.fillRect(0, 338, CANVAS_W, CANVAS_H - 338);
-    // Grass tufts
-    g.fillStyle(0x52a83a, 0.55);
-    for (let i = 0; i < 22; i++) {
-      g.fillEllipse((i * 32 + 6) % CANVAS_W, 350 + (i * 11 % 24), 14, 6);
+    // Right-upper cliff (x=connRX-CANVAS_W, y=upBotY-loTopY) — beside connector right
+    g.fillStyle(0x3e3020);
+    g.fillRect(connRX, upBotY, CANVAS_W - connRX, loTopY - upBotY);
+    g.fillStyle(0x2e2416, 0.45);
+    for (let ry = upBotY + 8; ry < loTopY; ry += 20) {
+      g.fillRect(connRX + 8, ry, (CANVAS_W - connRX) * 0.7, 4);
     }
 
-    // ── Bamboo fence — top of path (row 8, y 160) ────────────────────
-    // horizontal rails
-    g.fillStyle(0xa87828);
-    g.fillRect(0, 157, CANVAS_W, 3);
-    g.fillRect(0, 164, CANVAS_W, 2);
-    // vertical posts every 20 px
-    for (let fx = 2; fx < CANVAS_W; fx += 20) {
-      g.fillStyle(0xc89040);
-      g.fillRect(fx, 150, 5, 22);
-      g.fillStyle(0xdcb060, 0.65);  // highlight edge
-      g.fillRect(fx, 150, 2, 22);
-      g.fillStyle(0xa07030, 0.45);  // knuckle band
-      g.fillRect(fx, 159, 5, 2);
+    // Bottom cliff (below lower segment)
+    g.fillStyle(0x332818);
+    g.fillRect(0, loBotY, CANVAS_W, CANVAS_H - loBotY);
+    g.fillStyle(0x28200e, 0.5);
+    for (let ry = loBotY + 8; ry < CANVAS_H - 28; ry += 14) {
+      g.fillRect(0, ry, CANVAS_W, 4);
     }
 
-    // ── Bamboo fence — bottom of path (row 16, y 320) ────────────────
-    g.fillStyle(0xa87828);
-    g.fillRect(0, 318, CANVAS_W, 3);
-    g.fillRect(0, 325, CANVAS_W, 2);
-    for (let fx = 2; fx < CANVAS_W; fx += 20) {
-      g.fillStyle(0xc89040);
-      g.fillRect(fx, 312, 5, 22);
-      g.fillStyle(0xdcb060, 0.65);
-      g.fillRect(fx, 312, 2, 22);
-      g.fillStyle(0xa07030, 0.45);
-      g.fillRect(fx, 320, 5, 2);
+    // Water strip at very bottom (visible below the cliff)
+    g.fillStyle(0x1565c0);
+    g.fillRect(0, CANVAS_H - 28, CANVAS_W, 28);
+    g.fillStyle(0x1e88e5, 0.6);
+    g.fillRect(0, CANVAS_H - 18, CANVAS_W, 14);
+    // Animated water ripples
+    const rippleOff = (this.exitPulseTimer / 6) % 50;
+    g.fillStyle(0x64b5f6, 0.38);
+    for (let wx = -50 + rippleOff; wx < CANVAS_W + 50; wx += 50) {
+      g.fillEllipse(wx, CANVAS_H - 13, 38, 5);
     }
 
-    // ── Decorative trees (start area — left, and right side) ─────────
+    // ── 4. PATH fills (sandy beige) ───────────────────────────────────
+    // Upper segment (including wall rows for seamless look)
+    g.fillStyle(0xe8d598);
+    g.fillRect(0, upTopY, connRX, upBotY - upTopY);
+    // Connector (column)
+    g.fillRect(connLX, upTopY, connRX - connLX, loTopY - upTopY);
+    // Lower segment
+    g.fillRect(connLX, loTopY, CANVAS_W - connLX, loBotY - loTopY);
+
+    // Path centre highlight
+    const uCY = (upTopY + upBotY) / 2;
+    const lCY = (loTopY + loBotY) / 2;
+    const cCX = (connLX + connRX) / 2;
+    g.fillStyle(0xf4e9be, 0.36);
+    g.fillRect(CELL_SIZE, uCY - 7, connRX - CELL_SIZE * 2, 14);         // upper
+    g.fillRect(cCX - 6, upBotY, 12, loTopY - upBotY);                   // connector
+    g.fillRect(connRX + CELL_SIZE, lCY - 7, CANVAS_W - connRX - CELL_SIZE * 2, 14); // lower
+
+    // Edge shadows near walls (depth effect)
+    g.fillStyle(0xc4a860, 0.18);
+    g.fillRect(0, upTopY, connRX, 15);                   // upper top
+    g.fillRect(0, upBotY - 15, connLX, 15);              // upper bottom
+    g.fillRect(connLX, loTopY, CANVAS_W - connLX, 15);   // lower top
+    g.fillRect(connLX, loBotY - 15, CANVAS_W - connLX, 15); // lower bottom
+
+    // ── 5. DIRECTION GUIDE DOTS along path centre ─────────────────────
+    g.fillStyle(0xfff2aa, 0.62);
+    // Upper: horizontal dots
+    for (let dx = 35; dx < connRX - 15; dx += 22) {
+      g.fillCircle(dx, uCY, 2.5);
+    }
+    // Connector: vertical dots (curve indicator)
+    for (let dy = upBotY + 15; dy < loTopY - 15; dy += 22) {
+      g.fillCircle(cCX, dy, 2.5);
+    }
+    // Lower: horizontal dots
+    for (let dx = connRX + 15; dx < CANVAS_W - 28; dx += 22) {
+      g.fillCircle(dx, lCY, 2.5);
+    }
+
+    // ── 6. BAMBOO FENCE helpers ───────────────────────────────────────
+    const fenceH = (x1: number, x2: number, fy: number) => {
+      g.fillStyle(0xa87828);
+      g.fillRect(x1, fy - 2, x2 - x1, 3);
+      g.fillRect(x1, fy + 4, x2 - x1, 2);
+      for (let fx = x1 + 2; fx < x2; fx += 20) {
+        g.fillStyle(0xc89040);
+        g.fillRect(fx, fy - 8, 5, 18);
+        g.fillStyle(0xdcb060, 0.6);
+        g.fillRect(fx, fy - 8, 2, 18);
+        g.fillStyle(0xa07030, 0.42);
+        g.fillRect(fx, fy + 1, 5, 2);
+      }
+    };
+    const fenceV = (fx: number, y1: number, y2: number) => {
+      g.fillStyle(0xa87828);
+      g.fillRect(fx - 2, y1, 3, y2 - y1);
+      g.fillRect(fx + 4, y1, 2, y2 - y1);
+      for (let fy = y1 + 2; fy < y2; fy += 20) {
+        g.fillStyle(0xc89040);
+        g.fillRect(fx - 8, fy, 18, 5);
+        g.fillStyle(0xdcb060, 0.6);
+        g.fillRect(fx - 8, fy, 18, 2);
+        g.fillStyle(0xa07030, 0.42);
+        g.fillRect(fx + 2, fy, 2, 5);
+      }
+    };
+
+    // Upper segment top fence    (row 4,  cols 1-19 = x 20-380)
+    fenceH(CELL_SIZE, connRX, upTopY);
+    // Upper segment bottom fence (row 9,  cols 1-15 = x 20-300)  -- stops at cliff
+    fenceH(CELL_SIZE, 16 * CELL_SIZE, upBotY);
+    // Connector right fence      (col 20, rows 5-17 = y 100-340)
+    fenceV(connRX, upTopY + CELL_SIZE, loTopY);
+    // Connector left fence       (col 16, rows 10-17 = y 200-340)
+    fenceV(connLX, upBotY + CELL_SIZE, loTopY);
+    // Lower segment top fence    (row 18, cols 20-31 = x 400-620)
+    fenceH(connRX, CANVAS_W - CELL_SIZE, loTopY);
+    // Lower segment bottom fence (row 22, cols 16-31 = x 320-620)
+    fenceH(connLX, CANVAS_W - CELL_SIZE, loBotY);
+    // Lower segment left fence   (col 16, rows 19-21 = y 380-420)
+    fenceV(connLX, loTopY + CELL_SIZE, loBotY);
+
+    // ── 7. ⚠️ WARNING SIGNS at open cliff edges ────────────────────────
+    const warnSign = (wx: number, wy: number) => {
+      // Yellow exclamation triangle
+      g.fillStyle(0xffcc00, 0.88);
+      g.fillTriangle(wx, wy - 11, wx - 9, wy + 6, wx + 9, wy + 6);
+      g.fillStyle(0x1a1500, 0.8);
+      g.fillRect(wx - 1.5, wy - 7, 3, 8);
+      g.fillCircle(wx, wy + 3.5, 1.8);
+    };
+    // Open cliff edge at bottom-right of upper segment (row 9, cols 16-20)
+    warnSign(17 * CELL_SIZE + CELL_SIZE / 2, upBotY + 14);
+    warnSign(19 * CELL_SIZE + CELL_SIZE / 2, upBotY + 14);
+    // Open left edge beside connector
+    warnSign(CELL_SIZE / 2, (upBotY + loTopY) / 2);
+
+    // ── 8. TREES flanking path ─────────────────────────────────────────
     const tree = (tx: number, ty: number, s: number) => {
       g.fillStyle(0x5c3317);
-      g.fillRect(tx - Math.round(3 * s), ty, Math.round(6 * s), Math.round(24 * s));
+      g.fillRect(tx - Math.round(3 * s), ty, Math.round(6 * s), Math.round(22 * s));
       g.fillStyle(0x1b5c0a);
-      g.fillEllipse(tx, ty - Math.round(8 * s), Math.round(38 * s), Math.round(28 * s));
-      g.fillStyle(0x2d8a14, 0.65);
-      g.fillEllipse(tx, ty - Math.round(15 * s), Math.round(26 * s), Math.round(18 * s));
-      g.fillStyle(0x4aaa22, 0.38);
-      g.fillEllipse(tx - Math.round(5 * s), ty - Math.round(18 * s), Math.round(12 * s), Math.round(9 * s));
+      g.fillEllipse(tx, ty - Math.round(8 * s), Math.round(36 * s), Math.round(26 * s));
+      g.fillStyle(0x2d8a14, 0.62);
+      g.fillEllipse(tx, ty - Math.round(15 * s), Math.round(24 * s), Math.round(16 * s));
+      g.fillStyle(0x48a820, 0.35);
+      g.fillEllipse(tx - Math.round(5 * s), ty - Math.round(17 * s), Math.round(11 * s), Math.round(8 * s));
     };
-    // Left side — flanking the start
-    tree(16, 350, 0.95);
-    tree(38, 340, 0.78);
-    // Right side — near goal
-    tree(618, 345, 0.88);
-    tree(602, 358, 0.72);
+    // Left of start (above upper segment)
+    tree(12, 62, 0.70);
+    tree(28, 50, 0.56);
+    // Right side above upper segment (before goal area)
+    tree(428, 56, 0.62);
+    tree(446, 44, 0.50);
+    // Near goal (lower segment right side)
+    tree(616, loTopY + 8, 0.82);
+    tree(598, loTopY + 20, 0.65);
 
-    // ── START flag (near col 2, row 12) ──────────────────────────────
-    const sfx = 2 * CELL_SIZE + CELL_SIZE / 2;  // col 2 → x=50
-    const sfy = 12 * CELL_SIZE + CELL_SIZE / 2; // row 12 → y=250
-    // Flag pole
+    // ── 9. START FLAG (col 2, row 6 → x=50, y=130) ───────────────────
+    const sfx = 2 * CELL_SIZE + CELL_SIZE / 2;
+    const sfy = uCY;
     g.fillStyle(0x3a2010);
-    g.fillRect(sfx - 1, sfy - 24, 2, 28);
-    // Green flag triangle
+    g.fillRect(sfx - 1, sfy - 22, 2, 26);
     g.fillStyle(0x44cc22);
-    g.fillTriangle(sfx + 1, sfy - 24, sfx + 16, sfy - 18, sfx + 1, sfy - 10);
-    // Warning sign post: yellow arrow pointing right
-    g.fillStyle(0xffdd00, 0.9);
-    g.fillRect(sfx + 18, sfy - 5, 18, 6);
-    g.fillTriangle(sfx + 36, sfy - 9, sfx + 46, sfy - 2, sfx + 36, sfy + 5);
+    g.fillTriangle(sfx + 1, sfy - 22, sfx + 16, sfy - 15, sfx + 1, sfy - 9);
+    // Right-pointing arrow guide
+    g.fillStyle(0xffdd00, 0.80);
+    g.fillRect(sfx + 18, sfy - 3, 15, 5);
+    g.fillTriangle(sfx + 33, sfy - 7, sfx + 42, sfy - 1, sfx + 33, sfy + 5);
   }
 
   private drawBackground(): void {
