@@ -78,8 +78,8 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
     gloryStart: { col: 2, row: 12 },
     exitZone:   { col: 30, row: 12 },
-    collectibles: [[5,12],[8,10],[11,12],[14,10],[17,12],[20,10],[23,12],[26,10]] as [number,number][],
-    bushes: [[4,11],[10,13],[18,11],[24,13]],
+    collectibles: [[8,12],[16,12],[24,12]] as [number,number][],
+    bushes: [],
   },
   // Level 2: Narrow Trail — thinner path, more curves, no enemies
   {
@@ -1344,7 +1344,142 @@ class VenomArenaScene extends Phaser.Scene {
     this.bgGraphics.fillRoundedRect(cx - 15, cy - 31, 30, 10, 3);
   }
 
+  // ── Level 1: Clean Mountain Path background ──────────────────────────────
+  private drawLevel1Background(): void {
+    const g = this.bgGraphics;
+
+    // ── Sky (light blue, full canvas) ────────────────────────────────
+    g.fillStyle(0xa8d8f0);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // Lighter horizon glow
+    g.fillStyle(0xd4ecf8, 0.45);
+    g.fillRect(0, 90, CANVAS_W, 80);
+
+    // ── 3 soft fluffy clouds ─────────────────────────────────────────
+    const cloud = (cx: number, cy: number, s: number) => {
+      g.fillStyle(0xffffff, 0.84);
+      g.fillEllipse(cx,          cy,          58 * s, 22 * s);
+      g.fillEllipse(cx - 18 * s, cy +  5 * s, 34 * s, 17 * s);
+      g.fillEllipse(cx + 18 * s, cy +  5 * s, 38 * s, 18 * s);
+      g.fillEllipse(cx,          cy -  9 * s, 28 * s, 15 * s);
+    };
+    cloud(105, 38, 0.88);
+    cloud(375, 24, 1.05);
+    cloud(555, 50, 0.72);
+
+    // ── Soft mountain silhouette (muted lavender-grey) ───────────────
+    g.fillStyle(0xb8b0cc, 0.52);
+    g.fillEllipse(75,  172, 265, 115);
+    g.fillEllipse(262, 155, 308, 130);
+    g.fillEllipse(492, 162, 248, 105);
+    g.fillStyle(0xd0c8de, 0.32);
+    g.fillEllipse(198, 145, 168, 80);
+    g.fillEllipse(418, 140, 192, 82);
+    // Snow caps
+    g.fillStyle(0xffffff, 0.40);
+    g.fillEllipse(262, 132, 90, 28);
+    g.fillEllipse(492, 130, 72, 22);
+
+    // ── Green ground — above path strip ──────────────────────────────
+    // y 0-160 below sky (behind mountain) already sky colour
+    // Just add a narrow grass strip at the fence top
+    g.fillStyle(0x4da834);
+    g.fillRect(0, 150, CANVAS_W, 12);
+    g.fillStyle(0x62c040, 0.5);
+    g.fillRect(0, 145, CANVAS_W, 8);
+
+    // ── Path (wide beige/sandy band, y 160-340) ───────────────────────
+    // Row 8 = y 160 (top fence), row 16 = y 320 (bottom fence)
+    g.fillStyle(0xead9a2);
+    g.fillRect(0, 160, CANVAS_W, 180);
+    // Subtle centre highlight stripe
+    g.fillStyle(0xf4e9bc, 0.40);
+    g.fillRect(0, 225, CANVAS_W, 30);
+    // Shadow edges near fences
+    g.fillStyle(0xc4a860, 0.20);
+    g.fillRect(0, 160, CANVAS_W, 22);
+    g.fillRect(0, 298, CANVAS_W, 22);
+    // Faint trail marks (two subtle ruts)
+    g.fillStyle(0xc8b070, 0.18);
+    for (let tx = 0; tx < CANVAS_W; tx += 22) {
+      g.fillRect(tx, 215, 14, 3);
+      g.fillRect(tx + 8, 265, 14, 3);
+    }
+
+    // ── Green ground — below path ─────────────────────────────────────
+    g.fillStyle(0x3d8028);
+    g.fillRect(0, 338, CANVAS_W, CANVAS_H - 338);
+    // Grass tufts
+    g.fillStyle(0x52a83a, 0.55);
+    for (let i = 0; i < 22; i++) {
+      g.fillEllipse((i * 32 + 6) % CANVAS_W, 350 + (i * 11 % 24), 14, 6);
+    }
+
+    // ── Bamboo fence — top of path (row 8, y 160) ────────────────────
+    // horizontal rails
+    g.fillStyle(0xa87828);
+    g.fillRect(0, 157, CANVAS_W, 3);
+    g.fillRect(0, 164, CANVAS_W, 2);
+    // vertical posts every 20 px
+    for (let fx = 2; fx < CANVAS_W; fx += 20) {
+      g.fillStyle(0xc89040);
+      g.fillRect(fx, 150, 5, 22);
+      g.fillStyle(0xdcb060, 0.65);  // highlight edge
+      g.fillRect(fx, 150, 2, 22);
+      g.fillStyle(0xa07030, 0.45);  // knuckle band
+      g.fillRect(fx, 159, 5, 2);
+    }
+
+    // ── Bamboo fence — bottom of path (row 16, y 320) ────────────────
+    g.fillStyle(0xa87828);
+    g.fillRect(0, 318, CANVAS_W, 3);
+    g.fillRect(0, 325, CANVAS_W, 2);
+    for (let fx = 2; fx < CANVAS_W; fx += 20) {
+      g.fillStyle(0xc89040);
+      g.fillRect(fx, 312, 5, 22);
+      g.fillStyle(0xdcb060, 0.65);
+      g.fillRect(fx, 312, 2, 22);
+      g.fillStyle(0xa07030, 0.45);
+      g.fillRect(fx, 320, 5, 2);
+    }
+
+    // ── Decorative trees (start area — left, and right side) ─────────
+    const tree = (tx: number, ty: number, s: number) => {
+      g.fillStyle(0x5c3317);
+      g.fillRect(tx - Math.round(3 * s), ty, Math.round(6 * s), Math.round(24 * s));
+      g.fillStyle(0x1b5c0a);
+      g.fillEllipse(tx, ty - Math.round(8 * s), Math.round(38 * s), Math.round(28 * s));
+      g.fillStyle(0x2d8a14, 0.65);
+      g.fillEllipse(tx, ty - Math.round(15 * s), Math.round(26 * s), Math.round(18 * s));
+      g.fillStyle(0x4aaa22, 0.38);
+      g.fillEllipse(tx - Math.round(5 * s), ty - Math.round(18 * s), Math.round(12 * s), Math.round(9 * s));
+    };
+    // Left side — flanking the start
+    tree(16, 350, 0.95);
+    tree(38, 340, 0.78);
+    // Right side — near goal
+    tree(618, 345, 0.88);
+    tree(602, 358, 0.72);
+
+    // ── START flag (near col 2, row 12) ──────────────────────────────
+    const sfx = 2 * CELL_SIZE + CELL_SIZE / 2;  // col 2 → x=50
+    const sfy = 12 * CELL_SIZE + CELL_SIZE / 2; // row 12 → y=250
+    // Flag pole
+    g.fillStyle(0x3a2010);
+    g.fillRect(sfx - 1, sfy - 24, 2, 28);
+    // Green flag triangle
+    g.fillStyle(0x44cc22);
+    g.fillTriangle(sfx + 1, sfy - 24, sfx + 16, sfy - 18, sfx + 1, sfy - 10);
+    // Warning sign post: yellow arrow pointing right
+    g.fillStyle(0xffdd00, 0.9);
+    g.fillRect(sfx + 18, sfy - 5, 18, 6);
+    g.fillTriangle(sfx + 36, sfy - 9, sfx + 46, sfy - 2, sfx + 36, sfy + 5);
+  }
+
   private drawBackground(): void {
+    // Level 1 uses its own clean visual design
+    if (gameLevel === 1) { this.drawLevel1Background(); return; }
+
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);
     this.bgGraphics.fillRect(0, 0, CANVAS_W, 70);
