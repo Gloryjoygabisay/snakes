@@ -13,9 +13,35 @@
       <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
       <h1 id="start-title">Venom Arena</h1>
-      <div id="play-area">
-        <button id="play-btn" class="play-button">▶ PLAY</button>
-        <p class="play-tagline">10 levels · Simple to Legendary</p>
+      <!-- Mode cards -->
+      <div id="mode-select">
+        <div class="mode-card explorer-card" data-mode="explorer">
+          <div class="mode-icon">🌿</div>
+          <div class="mode-info">
+            <div class="mode-name">Explorer Mode</div>
+            <div class="mode-tagline">Learn &amp; Relax · 3 levels + 2 bonus</div>
+          </div>
+          <div class="mode-badge badge-easy">Easy</div>
+          <span class="mode-lock"></span>
+        </div>
+        <div class="mode-card survivor-card" data-mode="survivor">
+          <div class="mode-icon">⚔️</div>
+          <div class="mode-info">
+            <div class="mode-name">Survivor Mode</div>
+            <div class="mode-tagline">Real game starts · 4 levels + 3 bonus</div>
+          </div>
+          <div class="mode-badge badge-medium">Medium</div>
+          <span class="mode-lock">🔒</span>
+        </div>
+        <div class="mode-card legend-card" data-mode="legend">
+          <div class="mode-icon">🔥</div>
+          <div class="mode-info">
+            <div class="mode-name">Legend Mode</div>
+            <div class="mode-tagline">Master Tier · 3 levels + 5 bonus</div>
+          </div>
+          <div class="mode-badge badge-hard">Hard</div>
+          <span class="mode-lock">🔒</span>
+        </div>
       </div>
 
       <div id="start-about-button-wrap">
@@ -30,7 +56,13 @@
 
       <div id="level-screen-inner">
         <button id="back-to-modes" class="back-button">← Back</button>
-        <h2 id="level-mode-title">🐍 Choose Your Level</h2>
+        <div id="level-mode-header">
+          <span id="level-mode-icon">🌿</span>
+          <div>
+            <h2 id="level-mode-title">Explorer Mode</h2>
+            <p id="level-mode-tagline">Learn &amp; Relax · No pressure</p>
+          </div>
+        </div>
 
         <div id="level-cards" class="level-list">
           <!-- dynamically populated by main.ts -->

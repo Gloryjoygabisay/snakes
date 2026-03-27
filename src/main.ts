@@ -4,6 +4,8 @@ import { loadGameModule } from './game-loader';
 import { startBgAnimation } from './bg-snakes';
 import packageJson from '../package.json';
 
+type GameMode = 'explorer' | 'survivor' | 'legend';
+
 const appVersion = import.meta.env.VITE_APP_VERSION || packageJson.version;
 
 let gameController: GameController | null = null;
@@ -13,91 +15,179 @@ let bgAnim: { stop: () => void; setColors: (b: string, h: string) => void } | nu
 
 let selectedBodyColor = 0xe74c3c;
 let selectedHeadColor = 0xff6b6b;
+let selectedMode: GameMode = 'explorer';
 let selectedLevel: number = 1;
 
-const startScreen  = document.getElementById('start-screen');
-const levelScreen  = document.getElementById('level-screen');
-const gameShell    = document.getElementById('game-shell');
-const aboutPanel   = document.getElementById('about-panel');
+const startScreen = document.getElementById('start-screen');
+const levelScreen = document.getElementById('level-screen');
+const gameShell   = document.getElementById('game-shell');
+const aboutPanel  = document.getElementById('about-panel');
 
 function setText(id: string, value: string): void {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
 }
-
 function openAbout():  void { aboutPanel?.classList.remove('hidden'); }
 function closeAbout(): void { aboutPanel?.classList.add('hidden'); }
-
 function setVersionText(): void {
   setText('start-version-value', appVersion);
-  setText('version-value',       appVersion);
+  setText('version-value', appVersion);
   setText('about-version-value', appVersion);
 }
-
 function getGameModule(): Promise<typeof import('./game')> {
   if (!gameModulePromise) gameModulePromise = loadGameModule();
   return gameModulePromise;
 }
 
-const LEVEL_META: Array<{ name: string; icon: string; desc: string; color: string }> = [
-  { name: 'Mountain Path',        icon: '🟢', desc: 'Learn controls · Wide road · No enemies',          color: 'easy' },
-  { name: 'Narrow Trail',         icon: '🟢', desc: 'Precision control · Thinner path · No enemies',     color: 'easy' },
-  { name: 'Bamboo Bridge',        icon: '🟡', desc: 'Careful movement · Very narrow · One mistake = fall', color: 'medium' },
-  { name: 'Split Paths',          icon: '🟡', desc: 'Decision making · Fork roads · Dead ends ahead',    color: 'medium' },
-  { name: 'First Enemy',          icon: '🟠', desc: 'Awareness · 1 slow enemy · Medium path',            color: 'hard' },
-  { name: 'Dark Forest',          icon: '🟠', desc: 'Limited vision · Fog of war · 1 enemy',             color: 'hard' },
-  { name: 'Cliff Edge Chaos',     icon: '🔴', desc: 'High pressure · Narrow curves · 2 enemies',         color: 'danger' },
-  { name: 'Maze Survival',        icon: '🔴', desc: 'Strategy · Complex maze · Dead ends everywhere',    color: 'danger' },
-  { name: 'Storm Mountain',       icon: '🔥', desc: 'Wind chaos · Obstacles · 3 fast enemies',           color: 'extreme' },
-  { name: 'FINAL: Serpent Arena', icon: '💀', desc: 'EVERYTHING · 4 enemies · Fast speed · No mercy',   color: 'extreme' },
-];
+// ── Level metadata (global level number → display info) ────────────────
+interface LevelMeta { name: string; desc: string; }
+const LEVEL_META: Record<number, LevelMeta> = {
+  1:  { name: 'Mountain Path',        desc: 'Learn controls · Wide road · No enemies' },
+  2:  { name: 'Narrow Trail',         desc: 'Precision control · Thinner path · No enemies' },
+  3:  { name: 'Bamboo Bridge',        desc: 'Very narrow · One mistake = fall 🌉' },
+  4:  { name: 'Split Paths',          desc: 'Fork roads · Dead ends · No enemies' },
+  5:  { name: 'First Enemy',          desc: '1 slow enemy · Medium path · Stay alert' },
+  6:  { name: 'Dark Forest',          desc: 'Fog of war · Limited vision · 1 enemy 🌑' },
+  7:  { name: 'Cliff Edge Chaos',     desc: 'Narrow S-curve · 2 enemies · High pressure' },
+  8:  { name: 'Maze Survival',        desc: 'Complex maze · Dead ends as traps · 2 enemies' },
+  9:  { name: 'Storm Mountain',       desc: 'Wind pushes you · 3 fast enemies · Chaos 🌪️' },
+  10: { name: 'FINAL: Serpent Arena', desc: '4 enemies · Fast speed · NO MERCY 💀' },
+  // Explorer bonus
+  11: { name: '⭐ Fruit Rush',         desc: 'Huge field · Tons of food · Relax & collect 🍎' },
+  12: { name: '⭐ Practice Field',     desc: 'Open canvas · No walls · Free movement' },
+  // Survivor bonus
+  13: { name: '⭐ Hunter Chase',       desc: 'Enemy hunts you relentlessly · Run! 👀' },
+  14: { name: '⭐ Timed Escape',       desc: 'Tight corridor · 2 enemies · 1 life ⏱️' },
+  15: { name: '⭐ Trap Field',         desc: 'Hidden poison traps · 2 enemies ☠️' },
+  // Legend bonus
+  16: { name: '⭐ Poison Run',         desc: 'Navigate toxic tile gauntlet ☠️' },
+  17: { name: '⭐ Mirror Maze',        desc: 'Controls REVERSED · Maze · 2 enemies 😵' },
+  18: { name: '⭐ Double Speed',       desc: 'Everything blazing fast ⚡' },
+  19: { name: '⭐ No Vision',          desc: 'Almost completely dark · 3 enemies 🌑' },
+  20: { name: '⭐ Endless Arena',      desc: 'Survive 3 minutes vs 5 enemies · No exit 🏟️' },
+};
 
-function getProgress(): number[] {
-  try { return JSON.parse(localStorage.getItem('venom_progress_campaign') ?? '[]') as number[]; }
+// ── Mode definitions ─────────────────────────────────────────────────────
+interface ModeConfig {
+  icon: string; title: string; tagline: string; badge: string; badgeClass: string;
+  mainLevels: number[];
+  bonusLevels: number[];
+  unlockAfterLevel: number | null; // null = always open
+  bonusUnlockAfterLevel: number;   // finishing this level unlocks bonus
+}
+const MODES: Record<GameMode, ModeConfig> = {
+  explorer: {
+    icon: '🌿', title: 'Explorer Mode', tagline: 'Learn & Relax · No pressure',
+    badge: 'Easy', badgeClass: 'badge-easy',
+    mainLevels: [1, 2, 3],
+    bonusLevels: [11, 12],
+    unlockAfterLevel: null,
+    bonusUnlockAfterLevel: 3,
+  },
+  survivor: {
+    icon: '⚔️', title: 'Survivor Mode', tagline: 'Real game starts · Strategy + reflex',
+    badge: 'Medium', badgeClass: 'badge-medium',
+    mainLevels: [4, 5, 6, 7],
+    bonusLevels: [13, 14, 15],
+    unlockAfterLevel: 3,
+    bonusUnlockAfterLevel: 7,
+  },
+  legend: {
+    icon: '🔥', title: 'Legend Mode', tagline: 'Master Tier · Extreme survival',
+    badge: 'Hard', badgeClass: 'badge-hard',
+    mainLevels: [8, 9, 10],
+    bonusLevels: [16, 17, 18, 19, 20],
+    unlockAfterLevel: 7,
+    bonusUnlockAfterLevel: 10,
+  },
+};
+
+// ── Progress helpers ──────────────────────────────────────────────────────
+function getCompleted(): number[] {
+  try { return JSON.parse(localStorage.getItem('venom_completed') ?? '[]') as number[]; }
   catch { return []; }
 }
-function saveProgress(level: number): void {
-  const p = getProgress();
-  if (!p.includes(level)) { p.push(level); localStorage.setItem('venom_progress_campaign', JSON.stringify(p)); }
+function markCompleted(level: number): void {
+  const c = getCompleted();
+  if (!c.includes(level)) { c.push(level); localStorage.setItem('venom_completed', JSON.stringify(c)); }
 }
-function isLevelUnlocked(level: number): boolean {
-  if (level === 1) return true;
-  return getProgress().includes(level - 1);
+function isModeUnlocked(mode: GameMode): boolean {
+  const req = MODES[mode].unlockAfterLevel;
+  return req === null || getCompleted().includes(req);
+}
+function isLevelUnlocked(level: number, modeKey: GameMode): boolean {
+  const mode = MODES[modeKey];
+  const allLevels = [...mode.mainLevels, ...mode.bonusLevels];
+  if (!allLevels.includes(level)) return false;
+  if (mode.bonusLevels.includes(level)) {
+    // Bonus: need to have completed the bonusUnlockAfterLevel
+    if (!getCompleted().includes(mode.bonusUnlockAfterLevel)) return false;
+    // Also need previous bonus completed (sequential)
+    const idx = mode.bonusLevels.indexOf(level);
+    if (idx > 0 && !getCompleted().includes(mode.bonusLevels[idx - 1])) return false;
+    return true;
+  }
+  // Main: first level of mode needs mode unlock; subsequent need previous
+  if (level === mode.mainLevels[0]) return isModeUnlocked(modeKey);
+  const idx = mode.mainLevels.indexOf(level);
+  return getCompleted().includes(mode.mainLevels[idx - 1]);
 }
 
+// ── Next level in mode sequence ───────────────────────────────────────────
+function nextLevelInMode(mode: GameMode, current: number): number | null {
+  const seq = [...MODES[mode].mainLevels, ...MODES[mode].bonusLevels];
+  const idx = seq.indexOf(current);
+  return idx >= 0 && idx < seq.length - 1 ? seq[idx + 1] : null;
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────
 function showStartScreen(): void {
   levelScreen?.classList.add('hidden');
   gameShell?.classList.add('hidden');
   startScreen?.classList.remove('hidden');
   const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement | null;
   if (bgCanvas && !bgAnim) bgAnim = startBgAnimation(bgCanvas);
+  // Refresh mode card lock states
+  for (const key of Object.keys(MODES) as GameMode[]) {
+    const card = document.querySelector<HTMLElement>(`.mode-card[data-mode="${key}"]`);
+    if (!card) continue;
+    const locked = !isModeUnlocked(key);
+    card.classList.toggle('locked', locked);
+    const lockEl = card.querySelector<HTMLElement>('.mode-lock');
+    if (lockEl) lockEl.textContent = locked ? '🔒' : '';
+  }
 }
 
-function showLevelScreen(): void {
-  const levelCards = document.getElementById('level-cards')!;
-  levelCards.innerHTML = '';
-  for (let i = 1; i <= 10; i++) {
-    const lvl = i;
-    const meta = LEVEL_META[lvl - 1];
-    const unlocked = isLevelUnlocked(lvl);
-    const div = document.createElement('div');
-    div.className = `level-select-card level-card-${meta.color}${unlocked ? '' : ' locked'}`;
-    div.dataset.level = String(lvl);
-    div.innerHTML = `
-      <span class="lvl-num">${meta.icon} ${lvl}</span>
-      <div class="lvl-info">
-        <span class="lvl-name">${meta.name}</span>
-        <span class="lvl-desc">${meta.desc}</span>
-      </div>
-      <span class="lvl-lock">${unlocked ? '' : '🔒'}</span>
-    `;
-    if (unlocked) {
-      div.addEventListener('click', () => {
-        selectedLevel = lvl;
-        void startGame();
-      });
-    }
-    levelCards.appendChild(div);
+function showLevelScreen(mode: GameMode): void {
+  selectedMode = mode;
+  const cfg = MODES[mode];
+
+  setText('level-mode-icon',    cfg.icon);
+  setText('level-mode-title',   cfg.title);
+  setText('level-mode-tagline', cfg.tagline);
+
+  const cards = document.getElementById('level-cards')!;
+  cards.innerHTML = '';
+
+  // ── Main levels section ────────────────────────────────────────────
+  const mainHeader = document.createElement('div');
+  mainHeader.className = 'level-section-header';
+  mainHeader.textContent = '📋 Main Levels';
+  cards.appendChild(mainHeader);
+
+  for (const lvl of cfg.mainLevels) {
+    cards.appendChild(buildLevelCard(lvl, mode, false));
+  }
+
+  // ── Bonus levels section ───────────────────────────────────────────
+  const bonusHeader = document.createElement('div');
+  bonusHeader.className = 'level-section-header bonus-header';
+  const bonusLocked = !getCompleted().includes(cfg.bonusUnlockAfterLevel);
+  bonusHeader.innerHTML = `⭐ Bonus Levels${bonusLocked ? ' <span class="bonus-lock-hint">(finish Level ${cfg.bonusUnlockAfterLevel} to unlock)</span>' : ''}`;
+  cards.appendChild(bonusHeader);
+
+  for (const lvl of cfg.bonusLevels) {
+    cards.appendChild(buildLevelCard(lvl, mode, true));
   }
 
   startScreen?.classList.add('hidden');
@@ -106,12 +196,33 @@ function showLevelScreen(): void {
   if (lvlCanvas && !bgAnim) bgAnim = startBgAnimation(lvlCanvas);
 }
 
+function buildLevelCard(lvl: number, mode: GameMode, isBonus: boolean): HTMLDivElement {
+  const meta = LEVEL_META[lvl];
+  const unlocked = isLevelUnlocked(lvl, mode);
+  const completed = getCompleted().includes(lvl);
+  const div = document.createElement('div');
+  div.className = `level-select-card${isBonus ? ' bonus-card' : ''}${unlocked ? '' : ' locked'}`;
+  div.dataset.level = String(lvl);
+  div.innerHTML = `
+    <span class="lvl-num">${completed ? '✅' : (unlocked ? '▶' : '🔒')} ${lvl}</span>
+    <div class="lvl-info">
+      <span class="lvl-name">${meta.name}</span>
+      <span class="lvl-desc">${meta.desc}</span>
+    </div>
+  `;
+  if (unlocked) {
+    div.addEventListener('click', () => {
+      selectedLevel = lvl;
+      void startGame();
+    });
+  }
+  return div;
+}
+
+// ── Start game ────────────────────────────────────────────────────────────
 async function startGame(): Promise<void> {
   if (isStarting) return;
-  if (gameController) {
-    gameController.destroy();
-    gameController = null;
-  }
+  if (gameController) { gameController.destroy(); gameController = null; }
   isStarting = true;
   try {
     const { createGame } = await getGameModule();
@@ -125,7 +236,6 @@ async function startGame(): Promise<void> {
     return;
   }
   isStarting = false;
-
   bgAnim?.stop();
   bgAnim = null;
   levelScreen?.classList.add('hidden');
@@ -133,19 +243,27 @@ async function startGame(): Promise<void> {
   gameShell?.classList.remove('hidden');
 }
 
-// Play button → level select
-document.getElementById('play-btn')?.addEventListener('click', showLevelScreen);
+// ── Event listeners ────────────────────────────────────────────────────────
 
-// Back button on level screen
-document.getElementById('back-to-modes')?.addEventListener('click', showStartScreen);
-
-// Level-complete handler
-window.addEventListener('snake-level-complete', (e: Event) => {
-  const { level } = (e as CustomEvent<{ level: number }>).detail;
-  saveProgress(level);
+// Mode card clicks
+document.getElementById('mode-select')?.addEventListener('click', (e) => {
+  const card = (e.target as HTMLElement).closest<HTMLElement>('.mode-card[data-mode]');
+  if (!card) return;
+  const mode = card.dataset.mode as GameMode;
+  if (!isModeUnlocked(mode)) return;
+  showLevelScreen(mode);
 });
 
-// Menu button → back to start
+// Back button
+document.getElementById('back-to-modes')?.addEventListener('click', showStartScreen);
+
+// Level complete
+window.addEventListener('snake-level-complete', (e: Event) => {
+  const { level } = (e as CustomEvent<{ level: number }>).detail;
+  markCompleted(level);
+});
+
+// Menu button
 document.getElementById('menu-button')?.addEventListener('click', () => {
   gameController?.destroy();
   gameController = null;
@@ -155,17 +273,25 @@ document.getElementById('menu-button')?.addEventListener('click', () => {
   showStartScreen();
 });
 
-// Retry (same level on death)
+// Retry (play again — same level)
 document.getElementById('retry-btn')?.addEventListener('click', () => {
   window.dispatchEvent(new CustomEvent('snake-retry'));
 });
 
-// Next Level (advance after winning)
+// Next Level (advance within current mode sequence)
 document.getElementById('next-level-btn')?.addEventListener('click', () => {
-  if (selectedLevel < 10) {
-    selectedLevel += 1;
+  const next = nextLevelInMode(selectedMode, selectedLevel);
+  if (next !== null && isLevelUnlocked(next, selectedMode)) {
+    selectedLevel = next;
     void startGame();
+  } else if (next !== null) {
+    // Next exists but not yet unlocked (bonus lock) — go back to level select
+    gameController?.destroy();
+    gameController = null;
+    gameShell?.classList.add('hidden');
+    showLevelScreen(selectedMode);
   } else {
+    // End of mode
     gameController?.destroy();
     gameController = null;
     gameShell?.classList.add('hidden');
@@ -179,7 +305,7 @@ document.getElementById('about-button')?.addEventListener('click', openAbout);
 document.getElementById('close-about')?.addEventListener('click', closeAbout);
 aboutPanel?.addEventListener('click', (e) => { if (e.target === aboutPanel) closeAbout(); });
 
-// Init
+// ── Init ──────────────────────────────────────────────────────────────────
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement | null;
 if (bgCanvas) bgAnim = startBgAnimation(bgCanvas);
 setVersionText();

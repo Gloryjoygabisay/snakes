@@ -61,8 +61,10 @@ interface LevelConfig {
   collectibles?: [number, number][];
   gloryStart?: { col: number; row: number };
   bushes?: [number, number][];
-  bannerText?: string;   // shown as popup text when level starts (e.g. Level 3)
-  windEffect?: boolean;  // Level 9: wind pushes snake slightly
+  bannerText?: string;      // shown as popup text when level starts (e.g. Level 3)
+  windEffect?: boolean;     // Level 9: wind pushes snake slightly
+  reversedControls?: boolean; // Mirror Maze: joystick direction is inverted
+  isBonus?: boolean;          // marks as bonus level
 }
 
 const LEVEL_CONFIGS: LevelConfig[] = [
@@ -218,7 +220,6 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     walls: [
       ...hwall(3,  2, 30), ...hwall(21, 2, 30),
       ...vwall(2,  3, 21), ...vwall(30, 3, 21),
-      // Pillars / limited safe zones
       ...vwall(8,  5,  7), ...vwall(8,  17, 19),
       ...vwall(14, 9, 11), ...vwall(14, 13, 15),
       ...vwall(20, 5,  7), ...vwall(20, 17, 19),
@@ -228,6 +229,163 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     gloryStart: { col: 3, row: 12 },
     exitZone:   { col: 29, row: 12 },
     collectibles: [[5,7],[5,17],[10,5],[10,19],[15,12],[18,7],[18,17],[23,5],[23,19],[27,12]] as [number,number][],
+  },
+
+  // ── EXPLORER BONUS ──────────────────────────────────────────────────────
+
+  // Level 11: Fruit Rush — huge open field, loads of food, relaxed time
+  {
+    name: 'Fruit Rush', isBonus: true,
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 2.0, lives: 5, scoreMultiplier: 2, fogOfWar: false,
+    walls: [
+      ...hwall(1, 1, 30), ...hwall(22, 1, 30),
+      ...vwall(1, 1, 22), ...vwall(30, 1, 22),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 2, row: 12 },
+    exitZone:   { col: 29, row: 12 },
+    collectibles: [
+      [4,3],[7,3],[10,3],[13,3],[16,3],[19,3],[22,3],[25,3],[28,3],
+      [4,7],[7,7],[10,7],[13,7],[16,7],[19,7],[22,7],[25,7],[28,7],
+      [4,12],[7,12],[13,12],[19,12],[25,12],[28,12],
+      [4,17],[7,17],[10,17],[13,17],[16,17],[19,17],[22,17],[25,17],[28,17],
+      [4,21],[7,21],[10,21],[13,21],[16,21],[19,21],[22,21],
+    ] as [number,number][],
+    bushes: [[6,5],[14,9],[22,5],[8,15],[18,19],[26,11]],
+  },
+  // Level 12: Practice Field — open canvas, no walls, free roam
+  {
+    name: 'Practice Field', isBonus: true,
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 2.0, lives: 5, scoreMultiplier: 1, fogOfWar: false,
+    walls: [],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 2, row: 12 },
+    exitZone:   { col: 30, row: 4 },
+    collectibles: [[5,8],[10,4],[15,8],[20,4],[25,8],[10,16],[20,16],[15,12]] as [number,number][],
+    bushes: [[6,6],[12,10],[18,6],[24,14],[8,18],[16,14]],
+  },
+
+  // ── SURVIVOR BONUS ──────────────────────────────────────────────────────
+
+  // Level 13: Hunter Chase — 1 very fast enemy that chases relentlessly
+  {
+    name: 'Hunter Chase', isBonus: true,
+    survivalGoal: 999, snakeCount: 1, snakeTickMs: 160, glorySpeed: 2.5, lives: 2, scoreMultiplier: 2, fogOfWar: false,
+    walls: [
+      ...hwall(7, 3, 29), ...hwall(17, 3, 29),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,12],[7,11],[11,13],[15,11],[19,13],[23,11],[27,12]] as [number,number][],
+    bushes: [[6,13],[14,11],[22,13]],
+  },
+  // Level 14: Timed Escape — 2 enemies, tight corridor, 1 life
+  {
+    name: 'Timed Escape', isBonus: true,
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 220, glorySpeed: 2.5, lives: 1, scoreMultiplier: 3, fogOfWar: false,
+    walls: [
+      ...hwall(8, 3, 29), ...hwall(16, 3, 29),
+      ...vwall(10, 8, 16), ...vwall(20, 8, 16),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,12],[8,9],[12,13],[16,9],[20,13],[24,9],[27,12]] as [number,number][],
+  },
+  // Level 15: Trap Field — poison traps hidden in path, 2 enemies
+  {
+    name: 'Trap Field', isBonus: true,
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 240, glorySpeed: 2.5, lives: 2, scoreMultiplier: 2, fogOfWar: false,
+    walls: [
+      ...hwall(7, 3, 29), ...hwall(17, 3, 29),
+    ],
+    poisonTiles: [
+      [5,10],[5,11],[5,13],[5,14],
+      [10,10],[10,14],[15,10],[15,14],
+      [20,10],[20,11],[20,13],[20,14],
+      [25,10],[25,14],
+    ] as [number,number][],
+    iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[3,12],[7,12],[12,12],[17,12],[22,12],[28,12]] as [number,number][],
+  },
+
+  // ── LEGEND BONUS ────────────────────────────────────────────────────────
+
+  // Level 16: Poison Run — navigate through toxic tile gauntlet
+  {
+    name: 'Poison Run', isBonus: true,
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 200, glorySpeed: 3.0, lives: 2, scoreMultiplier: 3, fogOfWar: false,
+    walls: [
+      ...hwall(8, 3, 29), ...hwall(16, 3, 29),
+    ],
+    poisonTiles: [
+      [6,10],[6,11],[6,13],[6,14],
+      [11,10],[11,11],[11,13],[11,14],
+      [16,10],[16,11],[16,13],[16,14],
+      [21,10],[21,11],[21,13],[21,14],
+      [26,10],[26,11],[26,13],[26,14],
+    ] as [number,number][],
+    iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,12],[8,12],[14,12],[19,12],[24,12],[28,12]] as [number,number][],
+  },
+  // Level 17: Mirror Maze — controls reversed + maze + 2 enemies
+  {
+    name: 'Mirror Maze', isBonus: true,
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 220, glorySpeed: 2.8, lives: 1, scoreMultiplier: 3, fogOfWar: false,
+    reversedControls: true,
+    walls: [
+      ...hwall(4,  2, 14), ...hwall(4,  16, 30),
+      ...hwall(10, 6, 18), ...hwall(16, 2, 12),
+      ...hwall(16, 14, 28), ...hwall(22, 6, 20),
+      ...vwall(6,  4, 10), ...vwall(12, 10, 16),
+      ...vwall(18, 4, 10), ...vwall(24, 10, 22),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 1 },
+    exitZone:   { col: 30, row: 22 },
+    collectibles: [[3,5],[6,12],[9,18],[14,5],[18,12],[22,18],[27,12]] as [number,number][],
+  },
+  // Level 18: Double Speed — everything blazing fast
+  {
+    name: 'Double Speed', isBonus: true,
+    survivalGoal: 999, snakeCount: 3, snakeTickMs: 130, glorySpeed: 3.5, lives: 1, scoreMultiplier: 3, fogOfWar: false,
+    walls: [
+      ...hwall(8, 3, 29), ...hwall(16, 3, 29),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: true,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,12],[8,11],[12,13],[16,11],[20,13],[24,11],[28,12]] as [number,number][],
+  },
+  // Level 19: No Vision — almost completely dark, 3 enemies
+  {
+    name: 'No Vision', isBonus: true,
+    survivalGoal: 999, snakeCount: 3, snakeTickMs: 200, glorySpeed: 2.8, lives: 1, scoreMultiplier: 3, fogOfWar: true,
+    walls: [
+      ...hwall(8,  3, 29), ...hwall(9,  3, 29),
+      ...hwall(15, 3, 29), ...hwall(16, 3, 29),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[5,12],[10,11],[15,13],[20,11],[25,13],[28,12]] as [number,number][],
+  },
+  // Level 20: Endless Arena — survive 3 minutes vs 5 enemies (no exit)
+  {
+    name: 'Endless Arena', isBonus: true,
+    survivalGoal: 180, snakeCount: 5, snakeTickMs: 175, glorySpeed: 3.0, lives: 1, scoreMultiplier: 4, fogOfWar: false,
+    walls: [
+      ...hwall(3, 2, 30), ...hwall(21, 2, 30),
+      ...vwall(2, 3, 21), ...vwall(30, 3, 21),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: true, speedRamp: true,
+    gloryStart: { col: 3, row: 12 },
+    collectibles: [[6,6],[10,6],[15,6],[20,6],[25,6],[6,18],[10,18],[15,18],[20,18],[25,18],[15,12]] as [number,number][],
   },
 ];
 
@@ -719,14 +877,15 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Move Glory with wall collision
     if (this.joystickActive && this.dragDir) {
-      // Base speed is capped at 1.2 px/frame for smooth, controllable movement
+      // Base speed capped at 1.2 px/frame; reversed for Mirror Maze
+      const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
       const baseSpd = Math.min(this.glory.speed, 1.2);
       const spd = this.activePowerUp?.kind === 'speed'
         ? baseSpd * 1.8
         : baseSpd;
 
       // X axis: try movement, block on wall
-      const newX = this.glory.x + this.dragDir.dx * spd;
+      const newX = this.glory.x + this.dragDir.dx * spd * rev;
       const newXClamped = Math.max(12, Math.min(CANVAS_W - 12, newX));
       const newXCell = Math.max(0, Math.min(COLS - 1, Math.floor(newXClamped / CELL_SIZE)));
       const curYCell = Math.max(0, Math.min(ROWS - 1, Math.floor(this.glory.y / CELL_SIZE)));
@@ -735,7 +894,7 @@ class VenomArenaScene extends Phaser.Scene {
       }
 
       // Y axis: try movement, block on wall
-      const newY = this.glory.y + this.dragDir.dy * spd;
+      const newY = this.glory.y + this.dragDir.dy * spd * rev;
       const newYClamped = Math.max(12, Math.min(CANVAS_H - 12, newY));
       const curXCell = Math.max(0, Math.min(COLS - 1, Math.floor(this.glory.x / CELL_SIZE)));
       const newYCell = Math.max(0, Math.min(ROWS - 1, Math.floor(newYClamped / CELL_SIZE)));
