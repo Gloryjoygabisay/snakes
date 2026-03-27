@@ -8,8 +8,6 @@ const ROWS = 24;
 const CANVAS_W = COLS * CELL_SIZE;
 const CANVAS_H = ROWS * CELL_SIZE;
 
-type GameMode = 'explorer' | 'survivor' | 'legend';
-
 interface Challenge {
   q: string;
   choices: string[];
@@ -63,527 +61,176 @@ interface LevelConfig {
   collectibles?: [number, number][];
   gloryStart?: { col: number; row: number };
   bushes?: [number, number][];
+  bannerText?: string;   // shown as popup text when level starts (e.g. Level 3)
+  windEffect?: boolean;  // Level 9: wind pushes snake slightly
 }
 
-const LEVEL_CONFIGS: Record<GameMode, LevelConfig[]> = {
-  explorer: [
-    // Explorer L1: Basic Movement — straight corridor
-    {
-      name: 'Basic Movement',
-      survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-      walls: [
-        ...hwall(9,  4, 29), ...hwall(10, 4, 29),
-        ...hwall(14, 4, 29), ...hwall(15, 4, 29),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[6,11],[9,13],[12,11],[15,13],[18,11],[21,13],[24,11],[27,13]],
-      bushes: [[4,12],[8,10],[16,14],[22,12]],
-    },
-    // Explorer L2: Food Collection — open field, exit top-right
-    {
-      name: 'Food Collection',
-      survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-      walls: [
-        ...hwall(1,  1, 30), ...hwall(22, 1, 30),
-        ...vwall(1,  1, 22), ...vwall(30, 1, 22),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 20 },
-      exitZone:   { col: 30, row: 4 },
-      collectibles: [[5,5],[9,5],[13,5],[17,5],[21,5],[25,5],[5,11],[9,11],[13,11],[17,11],[21,11],[25,11],[5,17],[9,17],[13,17],[17,17]],
-      bushes: [[3,10],[8,8],[15,14],[22,8]],
-    },
-    // Explorer L3: Simple Turns + Fences — L-shaped path
-    {
-      name: 'Simple Turns',
-      survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-      walls: [
-        ...hwall(8,  1, 20), ...hwall(16, 1, 14),
-        ...hwall(16, 21, 30), ...hwall(22, 14, 30),
-        ...vwall(20, 8, 16), ...vwall(14, 16, 22),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 20 },
-      exitZone:   { col: 30, row: 4 },
-      collectibles: [[5,20],[5,15],[10,20],[10,9],[15,9],[20,12],[20,18],[25,18],[25,6],[28,6]],
-      bushes: [[3,15],[6,12],[14,8],[20,15]],
-    },
-    // Explorer L4: First Small Maze — Z-path
-    {
-      name: 'First Small Maze',
-      survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-      walls: [
-        ...hwall(6,  4, 16), ...hwall(6,  18, 28),
-        ...hwall(12, 10, 22), ...hwall(18, 4, 14),
-        ...hwall(18, 16, 28),
-        ...vwall(4,  6, 18), ...vwall(16, 12, 18),
-        ...vwall(22, 6, 12), ...vwall(28, 6, 18),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[6,12],[10,8],[14,15],[18,12],[22,8],[26,15],[28,12]],
-    },
-    // Explorer L5: Mini Challenge — wide corridor, 1 slow enemy
-    {
-      name: 'Mini Challenge',
-      survivalGoal: 999, snakeCount: 1, snakeTickMs: 480, glorySpeed: 2.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-      walls: [
-        ...hwall(8,  4, 28), ...hwall(9,  4, 28),
-        ...hwall(15, 4, 28), ...hwall(16, 4, 28),
-        ...vwall(4,  8, 16), ...vwall(28, 8, 16),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[7,11],[10,13],[13,11],[16,13],[19,11],[22,13],[25,11]],
-    },
-  ],
-  survivor: [
-    // Survivor L1: Intro Survival — wide open, 1 enemy
-    {
-      name: 'Intro Survival',
-      survivalGoal: 999, snakeCount: 1, snakeTickMs: 320, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...vwall(15, 4, 8), ...vwall(15, 16, 20),
-        ...hwall(4,  4, 14), ...hwall(20, 14, 28),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[8,8],[8,16],[12,12],[18,8],[18,16],[25,12]],
-    },
-    // Survivor L2: Narrow Path Control — 2-wide corridor
-    {
-      name: 'Narrow Path Control',
-      survivalGoal: 999, snakeCount: 1, snakeTickMs: 300, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(9,  3, 29),
-        ...hwall(15, 3, 29), ...hwall(16, 3, 29),
-        ...hwall(11, 8, 16), ...hwall(12, 8, 16),
-        ...hwall(11, 19, 24), ...hwall(12, 19, 24),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[10,13],[15,12],[20,13],[25,12]],
-    },
-    // Survivor L3: Bamboo Bridge — 2-cell wide bridge
-    {
-      name: 'Bamboo Bridge',
-      survivalGoal: 999, snakeCount: 1, snakeTickMs: 300, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(9,  3, 29), ...hwall(10, 3, 29),
-        ...hwall(13, 3, 29), ...hwall(14, 3, 29), ...hwall(15, 3, 29),
-        ...vwall(7,  8, 13), ...vwall(13, 8, 13),
-        ...vwall(19, 8, 13), ...vwall(25, 8, 13),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 11 },
-      exitZone:   { col: 30, row: 11 },
-      collectibles: [[5,11],[8,12],[11,11],[14,12],[17,11],[20,12],[23,11],[26,12]],
-    },
-    // Survivor L4: Split Path — upper and lower routes
-    {
-      name: 'Split Path',
-      survivalGoal: 999, snakeCount: 1, snakeTickMs: 280, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...vwall(8,  4, 10), ...vwall(8,  14, 20),
-        ...hwall(4,  8, 22), ...hwall(20, 8, 22),
-        ...vwall(22, 4, 10), ...vwall(22, 14, 20),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,7],[10,7],[16,7],[22,7],[28,7],[4,17],[10,17],[16,17],[22,17],[28,17]],
-    },
-    // Survivor L5: First Hunter — S-curve, 2 enemies
-    {
-      name: 'First Hunter',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 250, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(6,  4, 18), ...hwall(12, 10, 22),
-        ...hwall(18, 16, 28), ...hwall(21, 4, 16),
-        ...hwall(9,  16, 28),
-        ...vwall(18, 6, 12), ...vwall(10, 12, 18),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 18 },
-      exitZone:   { col: 30, row: 6 },
-      collectibles: [[4,18],[7,15],[10,18],[13,15],[16,12],[19,9],[22,6],[25,9],[28,6]],
-    },
-    // Survivor L6: Dark Forest — fog, breadcrumb trail, 2 enemies
-    {
-      name: 'Dark Forest',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 260, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: true,
-      walls: [
-        ...vwall(6,  5, 8),  ...vwall(6,  16, 19),
-        ...vwall(12, 8, 11), ...vwall(12, 13, 16),
-        ...vwall(18, 5, 8),  ...vwall(18, 16, 19),
-        ...vwall(24, 8, 11), ...vwall(24, 13, 16),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,12],[7,11],[10,12],[13,11],[16,12],[19,11],[22,12],[25,11],[28,12]],
-    },
-    // Survivor L7: Speed + Obstacles — staggered obstacles, 2 fast enemies
-    {
-      name: 'Speed + Obstacles',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 200, glorySpeed: 3.0, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(6,  4,  8), ...hwall(6,  12, 16), ...hwall(6,  20, 24),
-        ...hwall(10, 8, 12), ...hwall(10, 16, 20),
-        ...hwall(14, 4,  8), ...hwall(14, 12, 16), ...hwall(14, 20, 24),
-        ...hwall(18, 8, 12), ...hwall(18, 16, 20),
-        ...hwall(22, 4,  8), ...hwall(22, 12, 16), ...hwall(22, 20, 24),
-        ...hwall(26, 8, 12), ...hwall(26, 16, 20),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[3,12],[6,9],[9,12],[12,15],[15,12],[18,9],[21,12],[24,15],[27,12]],
-    },
-    // Survivor L8: Maze Survival — full maze, 2 enemies
-    {
-      name: 'Maze Survival',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 220, glorySpeed: 3.0, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(3,  2, 16), ...hwall(3,  18, 30),
-        ...hwall(9,  4, 12), ...hwall(9,  14, 22),
-        ...hwall(15, 6, 14), ...hwall(15, 16, 24),
-        ...hwall(21, 2, 10), ...hwall(21, 12, 20),
-        ...vwall(6,  3,  9), ...vwall(6,  15, 21),
-        ...vwall(12, 9, 15),
-        ...vwall(18, 3,  9), ...vwall(18, 15, 21),
-        ...vwall(24, 9, 15), ...vwall(28, 3, 21),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 1 },
-      exitZone:   { col: 30, row: 22 },
-      collectibles: [[2,5],[5,12],[8,18],[11,5],[14,12],[17,18],[20,5],[23,12],[26,18],[29,12]],
-    },
-    // Survivor L9: Multiple Enemies — pillar grid, 4 enemies
-    {
-      name: 'Multiple Enemies',
-      survivalGoal: 999, snakeCount: 4, snakeTickMs: 210, glorySpeed: 3.0, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...vwall(8,  4,  6), ...vwall(8,  18, 20),
-        ...vwall(14, 8, 10), ...vwall(14, 14, 16),
-        ...vwall(20, 4,  6), ...vwall(20, 18, 20),
-        ...vwall(26, 8, 10), ...vwall(26, 14, 16),
-        ...hwall(6,  4,  8), ...hwall(6,  20, 24),
-        ...hwall(18, 10, 14),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,12],[8,8],[8,16],[14,12],[20,8],[20,16],[26,12]],
-    },
-    // Survivor L10: Boss Stage — arena + inner obstacles
-    {
-      name: 'Boss Stage',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 220, glorySpeed: 3.0, lives: 2, scoreMultiplier: 2, fogOfWar: false,
-      walls: [
-        ...hwall(3,  3, 29), ...hwall(21, 3, 29),
-        ...vwall(3,  3, 21), ...vwall(29, 3, 21),
-        ...hwall(9,  9, 15), ...hwall(9,  17, 23),
-        ...hwall(15, 9, 15), ...hwall(15, 17, 23),
-        ...vwall(9,  9, 15), ...vwall(23, 9, 15),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: true, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[10,6],[10,18],[16,6],[16,18],[22,6],[22,18],[25,12]],
-    },
-  ],
-  legend: [
-    // Legend L1: Fast Start — wide corridor, 2 fast enemies
-    {
-      name: 'Fast Start',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 200, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(16, 3, 29),
-        ...vwall(3,  8, 16), ...vwall(29, 8, 16),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[9,11],[13,13],[17,11],[21,13],[25,11],[28,12]],
-    },
-    // Legend L2: Tight Corridor — 2-cell wide, pinch points
-    {
-      name: 'Tight Corridor',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(10, 3, 29), ...hwall(11, 3, 29),
-        ...hwall(13, 3, 29), ...hwall(14, 3, 29),
-        ...vwall(8,  10, 14), ...vwall(14, 10, 14),
-        ...vwall(20, 10, 14), ...vwall(26, 10, 14),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[9,12],[13,12],[17,12],[21,12],[25,12]],
-    },
-    // Legend L3: Double Enemy Chase — winding corridor, 3 fast enemies
-    {
-      name: 'Double Enemy Chase',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 180, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 16), ...hwall(16, 14, 28),
-        ...hwall(4,  18, 28),
-        ...vwall(16, 8, 16), ...vwall(3, 8, 18),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 20 },
-      exitZone:   { col: 30, row: 4 },
-      collectibles: [[3,20],[6,16],[9,12],[12,8],[15,8],[18,12],[21,16],[24,12],[27,8],[29,5]],
-    },
-    // Legend L4: IQ Gate Traps — straight path blocked by IQ gates
-    {
-      name: 'IQ Gate Traps',
-      survivalGoal: 999, snakeCount: 2, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(9,  3, 29), ...hwall(15, 3, 29),
-      ],
-      poisonTiles: [],
-      iqGatePositions: [
-        { col: 10, row: 12, challengeIdx: 0 },
-        { col: 16, row: 12, challengeIdx: 3 },
-        { col: 22, row: 12, challengeIdx: 7 },
-      ],
-      movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,11],[5,13],[13,11],[13,13],[19,11],[19,13],[27,11],[27,13]],
-    },
-    // Legend L5: Maze + Blind Corners — fog, 3 enemies
-    {
-      name: 'Maze + Blind Corners',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: true,
-      walls: [
-        ...hwall(4,  2, 14), ...hwall(4,  16, 30),
-        ...hwall(10, 6, 18), ...hwall(16, 2, 12),
-        ...hwall(16, 14, 28), ...hwall(22, 6, 20),
-        ...vwall(6,  4, 10), ...vwall(12, 10, 16),
-        ...vwall(18, 4, 10), ...vwall(24, 10, 22),
-        ...vwall(28, 4, 16),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 1 },
-      exitZone:   { col: 30, row: 22 },
-      collectibles: [[3,5],[6,12],[9,18],[14,5],[18,12],[22,18],[27,12]],
-    },
-    // Legend L6: Speed Ramp — straight corridor, enemies speed up, 3 enemies
-    {
-      name: 'Speed Ramp',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 200, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(9,  3, 29),
-        ...hwall(15, 3, 29), ...hwall(16, 3, 29),
-        ...vwall(8,  8, 16),
-        ...vwall(14, 8, 10), ...vwall(14, 14, 16),
-        ...vwall(20, 8, 10), ...vwall(20, 14, 16),
-        ...vwall(26, 8, 16),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: true,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[9,11],[13,13],[17,11],[21,13],[25,12]],
-    },
-    // Legend L7: Poison Zones — path through poisoned areas, 3 enemies
-    {
-      name: 'Poison Zones',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(16, 3, 29),
-      ],
-      poisonTiles: [
-        [6,10],[6,11],[6,13],[6,14],
-        [11,10],[11,11],[11,13],[11,14],
-        [16,10],[16,11],[16,13],[16,14],
-        [21,10],[21,11],[21,13],[21,14],
-        [26,10],[26,11],[26,13],[26,14],
-      ] as [number, number][],
-      iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,12],[8,12],[14,12],[19,12],[24,12],[28,12]],
-    },
-    // Legend L8: Multi-Path Traps — two paths with IQ gates, 3 enemies
-    {
-      name: 'Multi-Path Traps',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...vwall(14, 4, 10), ...vwall(14, 14, 20),
-        ...hwall(4,  14, 28), ...hwall(20, 4, 14),
-        ...hwall(8,  3, 13), ...hwall(8,  15, 29),
-        ...hwall(16, 3, 13), ...hwall(16, 15, 29),
-      ],
-      poisonTiles: [],
-      iqGatePositions: [
-        { col: 8,  row: 12, challengeIdx: 4 },
-        { col: 20, row: 12, challengeIdx: 8 },
-      ],
-      movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,7],[8,7],[12,7],[16,7],[20,7],[24,7],[28,7],[4,17],[8,17],[12,17]],
-    },
-    // Legend L9: Limited Vision + Enemies — fog + poison, 4 enemies
-    {
-      name: 'Limited Vision',
-      survivalGoal: 999, snakeCount: 4, snakeTickMs: 185, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: true,
-      walls: [
-        ...hwall(6,  3, 16), ...hwall(18, 14, 29),
-        ...vwall(16, 3, 14), ...vwall(3,  6, 18),
-      ],
-      poisonTiles: [
-        [5,10],[5,11],[5,13],[5,14],
-        [10,10],[10,14],
-        [20,10],[20,14],
-        [25,10],[25,11],[25,13],[25,14],
-      ] as [number, number][],
-      iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,12],[8,8],[12,12],[16,8],[20,12],[24,8],[28,12]],
-    },
-    // Legend L10: Mini Boss Arena — small arena, boss + 3 enemies
-    {
-      name: 'Mini Boss Arena',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 190, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(4,  3, 29), ...hwall(20, 3, 29),
-        ...vwall(3,  4, 20), ...vwall(29, 4, 20),
-        ...hwall(10, 6, 14), ...hwall(10, 18, 22),
-        ...hwall(14, 6, 14), ...hwall(14, 18, 22),
-        ...vwall(8,  10, 14), ...vwall(22, 10, 14),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: true, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,7],[5,17],[16,7],[16,17],[25,7],[25,17]],
-    },
-    // Legend L11: Moving Obstacles — corridor with moving walls, 3 enemies
-    {
-      name: 'Moving Obstacles',
-      survivalGoal: 999, snakeCount: 3, snakeTickMs: 185, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(8,  3, 29), ...hwall(16, 3, 29),
-      ],
-      poisonTiles: [], iqGatePositions: [],
-      movingWallConfigs: [
-        { col: 8,  row: 12, col2: 8,  row2: 10, intervalMs: 3000 },
-        { col: 16, row: 12, col2: 16, row2: 14, intervalMs: 4000 },
-        { col: 22, row: 12, col2: 22, row2: 10, intervalMs: 3500 },
-      ],
-      hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[4,12],[7,11],[11,13],[15,11],[19,13],[23,11],[27,12]],
-    },
-    // Legend L12: High-Speed Chase — straight, 4 fast enemies
-    {
-      name: 'High-Speed Chase',
-      survivalGoal: 999, snakeCount: 4, snakeTickMs: 160, glorySpeed: 3.5, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(10, 3, 29), ...hwall(11, 3, 29),
-        ...hwall(13, 3, 29), ...hwall(14, 3, 29),
-      ],
-      poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[10,11],[15,13],[20,11],[25,13],[28,12]],
-    },
-    // Legend L13: IQ + Movement Combo — maze + IQ gates + fog, 4 enemies
-    {
-      name: 'IQ + Move Combo',
-      survivalGoal: 999, snakeCount: 4, snakeTickMs: 175, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: true,
-      walls: [
-        ...hwall(6,  3, 18), ...hwall(6,  20, 29),
-        ...hwall(14, 8, 22),
-        ...vwall(18, 6, 14), ...vwall(12, 12, 20),
-      ],
-      poisonTiles: [],
-      iqGatePositions: [
-        { col: 9,  row: 12, challengeIdx: 2 },
-        { col: 15, row: 12, challengeIdx: 5 },
-        { col: 24, row: 12, challengeIdx: 9 },
-      ],
-      movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [] as [number,number][],
-    },
-    // Legend L14: Almost No Safe Zones — poison tiles + maze + 5 enemies
-    {
-      name: 'No Safe Zones',
-      survivalGoal: 999, snakeCount: 5, snakeTickMs: 175, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: false,
-      walls: [
-        ...hwall(4,  4, 28), ...hwall(20, 4, 28),
-        ...vwall(4,  4, 20), ...vwall(28, 4, 20),
-        ...hwall(8,  8, 24), ...hwall(16, 8, 24),
-        ...vwall(8,  8, 16), ...vwall(24, 8, 16),
-      ],
-      poisonTiles: [
-        [4,6],[5,6],[6,6],[7,6],
-        [8,7],[9,7],[10,7],[11,7],[12,7],[13,7],[14,7],[15,7],
-        [4,18],[5,18],[6,18],[7,18],
-        [8,17],[9,17],[10,17],[11,17],[12,17],[13,17],[14,17],[15,17],
-        [16,6],[17,6],[18,6],[19,6],[20,6],[21,6],[22,6],
-        [16,18],[17,18],[18,18],[19,18],[20,18],[21,18],[22,18],
-      ] as [number, number][],
-      iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[10,10],[15,12],[20,10],[25,12]],
-    },
-    // Legend L15: FINAL VENOM ARENA — all mechanics
-    {
-      name: 'FINAL VENOM ARENA',
-      survivalGoal: 999, snakeCount: 7, snakeTickMs: 165, glorySpeed: 3.2, lives: 1, scoreMultiplier: 3, fogOfWar: true,
-      walls: [
-        ...hwall(4,  2, 10), ...hwall(4,  16, 28),
-        ...hwall(8,  4, 14), ...hwall(8,  18, 28),
-        ...hwall(14, 2,  8), ...hwall(14, 20, 28),
-        ...hwall(20, 4, 14), ...hwall(20, 18, 26),
-        ...vwall(4,  4,  8), ...vwall(4,  14, 20),
-        ...vwall(12, 6, 12), ...vwall(12, 14, 20),
-        ...vwall(20, 4,  8), ...vwall(20, 16, 20),
-        ...vwall(28, 6, 14), ...vwall(16, 8, 12),
-      ],
-      poisonTiles: [
-        [2,2],[3,2],[2,3],[3,3],
-        [28,2],[29,2],[30,2],[29,3],
-        [2,20],[3,20],[2,21],[3,21],
-        [28,20],[29,20],[30,20],[29,21],
-        [14,12],[15,12],[16,12],[14,13],[15,13],
-        [8,8],[9,8],[8,9],[9,9],
-      ] as [number, number][],
-      iqGatePositions: [
-        { col: 11, row: 4,  challengeIdx: 9 },
-        { col: 15, row: 4,  challengeIdx: 0 },
-        { col: 21, row: 4,  challengeIdx: 1 },
-      ],
-      movingWallConfigs: [
-        { col: 16, row: 8,  col2: 16, row2: 10, intervalMs: 4000 },
-        { col: 4,  row: 8,  col2: 6,  row2: 8,  intervalMs: 5000 },
-        { col: 28, row: 14, col2: 26, row2: 14, intervalMs: 4500 },
-        { col: 12, row: 12, col2: 12, row2: 14, intervalMs: 6000 },
-      ],
-      hasBoss: true, speedRamp: true,
-      gloryStart: { col: 1, row: 12 },
-      exitZone:   { col: 30, row: 12 },
-      collectibles: [[5,12],[10,6],[16,10],[22,6],[25,12]] as [number,number][],
-    },
-  ],
-};
+const LEVEL_CONFIGS: LevelConfig[] = [
+  // Level 1: Mountain Path — wide, straight, no enemies
+  {
+    name: 'Mountain Path',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    walls: [
+      ...hwall(8,  2, 29), ...hwall(16, 2, 29),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 2, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[5,12],[8,10],[11,12],[14,10],[17,12],[20,10],[23,12],[26,10]] as [number,number][],
+    bushes: [[4,11],[10,13],[18,11],[24,13]],
+  },
+  // Level 2: Narrow Trail — thinner path, more curves, no enemies
+  {
+    name: 'Narrow Trail',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 500, glorySpeed: 1.8, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    walls: [
+      ...hwall(9,  2, 14), ...hwall(9, 16, 29),
+      ...hwall(15, 2, 14), ...hwall(15, 16, 29),
+      ...vwall(14, 9, 15), ...vwall(16, 9, 15),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 2, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[5,12],[7,11],[10,12],[13,11],[17,12],[19,11],[22,12],[25,11],[27,12]] as [number,number][],
+    bushes: [[4,13],[9,11],[15,13],[21,11],[27,13]],
+  },
+  // Level 3: Bamboo Bridge — very narrow 2-row bridge
+  {
+    name: 'Bamboo Bridge',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 500, glorySpeed: 1.2, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    bannerText: '🌉 BAMBOO BRIDGE',
+    walls: [
+      ...hwall(10, 2, 29), ...hwall(11, 2, 29),
+      ...hwall(14, 2, 29), ...hwall(15, 2, 29),
+      ...vwall(7,  10, 14), ...vwall(13, 10, 14),
+      ...vwall(19, 10, 14), ...vwall(25, 10, 14),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 2, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[5,12],[8,13],[11,12],[14,13],[17,12],[20,13],[23,12],[26,13]] as [number,number][],
+  },
+  // Level 4: Split Paths — two parallel routes, dead ends, choice
+  {
+    name: 'Split Paths',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 460, glorySpeed: 2.0, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    walls: [
+      // Upper path walls
+      ...hwall(3,  3, 29), ...hwall(8,  3, 13), ...hwall(8, 17, 29),
+      // Lower path walls
+      ...hwall(21, 3, 29), ...hwall(16, 3, 13), ...hwall(16, 17, 29),
+      // Middle divider (partial)
+      ...vwall(13, 8, 16), ...vwall(17, 8, 16),
+      // Dead ends
+      ...vwall(8, 3, 7), ...vwall(8, 17, 21),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,6],[7,6],[10,6],[4,18],[7,18],[10,18],[18,6],[22,6],[26,6],[18,18],[22,18],[26,18],[28,12]] as [number,number][],
+  },
+  // Level 5: First Enemy — medium path, 1 slow enemy
+  {
+    name: 'First Enemy',
+    survivalGoal: 999, snakeCount: 1, snakeTickMs: 420, glorySpeed: 2.0, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    walls: [
+      ...hwall(8,  3, 29), ...hwall(16, 3, 29),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[4,12],[7,11],[10,13],[13,11],[16,13],[19,11],[22,13],[25,11],[27,12]] as [number,number][],
+    bushes: [[5,13],[12,11],[20,13],[26,11]],
+  },
+  // Level 6: Dark Forest — fog of war, 1 enemy
+  {
+    name: 'Dark Forest',
+    survivalGoal: 999, snakeCount: 1, snakeTickMs: 320, glorySpeed: 2.2, lives: 2, scoreMultiplier: 2, fogOfWar: true,
+    walls: [
+      ...vwall(6,  4,  8), ...vwall(6,  16, 20),
+      ...vwall(12, 8, 12), ...vwall(12, 14, 18),
+      ...vwall(18, 4,  8), ...vwall(18, 16, 20),
+      ...vwall(24, 8, 12), ...vwall(24, 14, 18),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[3,12],[6,9],[9,12],[12,11],[16,12],[19,11],[22,12],[25,9],[28,12]] as [number,number][],
+    bushes: [[4,14],[9,10],[15,14],[22,10]],
+  },
+  // Level 7: Cliff Edge Chaos — narrow S-curve, 2 enemies, faster
+  {
+    name: 'Cliff Edge Chaos',
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 240, glorySpeed: 2.5, lives: 2, scoreMultiplier: 2, fogOfWar: false,
+    walls: [
+      ...hwall(6,  3, 16), ...hwall(18, 14, 29),
+      ...hwall(18, 3, 14), ...hwall(6, 14, 29),
+      ...vwall(16, 6, 18), ...vwall(3,  6, 18),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 18 },
+    exitZone:   { col: 30, row: 6 },
+    collectibles: [[3,18],[6,15],[9,12],[12,9],[15,8],[18,10],[21,8],[24,6],[27,6]] as [number,number][],
+  },
+  // Level 8: Maze Survival — full maze, 2 enemies, food as bait
+  {
+    name: 'Maze Survival',
+    survivalGoal: 999, snakeCount: 2, snakeTickMs: 220, glorySpeed: 2.5, lives: 2, scoreMultiplier: 2, fogOfWar: false,
+    walls: [
+      ...hwall(3,  2, 16), ...hwall(3,  18, 30),
+      ...hwall(9,  4, 12), ...hwall(9,  14, 22),
+      ...hwall(15, 6, 14), ...hwall(15, 16, 24),
+      ...hwall(21, 2, 10), ...hwall(21, 12, 20),
+      ...vwall(6,  3,  9), ...vwall(6,  15, 21),
+      ...vwall(12, 9, 15),
+      ...vwall(18, 3,  9), ...vwall(18, 15, 21),
+      ...vwall(24, 9, 15), ...vwall(28, 3, 21),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 1 },
+    exitZone:   { col: 30, row: 22 },
+    collectibles: [[2,5],[5,12],[8,18],[11,5],[14,12],[17,18],[20,5],[23,12],[26,18],[29,12]] as [number,number][],
+  },
+  // Level 9: Storm Mountain — wind effect, random obstacles, 3 fast enemies
+  {
+    name: 'Storm Mountain',
+    survivalGoal: 999, snakeCount: 3, snakeTickMs: 200, glorySpeed: 2.8, lives: 2, scoreMultiplier: 2, fogOfWar: false,
+    windEffect: true,
+    walls: [
+      ...hwall(7,  3, 10), ...hwall(7,  14, 18), ...hwall(7, 22, 29),
+      ...hwall(12, 6, 12), ...hwall(12, 16, 22),
+      ...hwall(17, 3,  8), ...hwall(17, 12, 18), ...hwall(17, 22, 29),
+      ...vwall(3,  7, 17),
+      ...vwall(10, 3,  7), ...vwall(10, 17, 22),
+      ...vwall(18, 7, 12), ...vwall(18, 18, 22),
+      ...vwall(22, 3,  7), ...vwall(22, 17, 22),
+      ...vwall(29, 3, 22),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 12 },
+    exitZone:   { col: 30, row: 12 },
+    collectibles: [[3,5],[6,9],[9,5],[13,12],[16,9],[20,12],[23,5],[27,9],[28,15]] as [number,number][],
+  },
+  // Level 10: Final Serpent Arena — open arena, 4 enemies, fast
+  {
+    name: 'FINAL: Serpent Arena',
+    survivalGoal: 999, snakeCount: 4, snakeTickMs: 180, glorySpeed: 3.0, lives: 1, scoreMultiplier: 3, fogOfWar: false,
+    walls: [
+      ...hwall(3,  2, 30), ...hwall(21, 2, 30),
+      ...vwall(2,  3, 21), ...vwall(30, 3, 21),
+      // Pillars / limited safe zones
+      ...vwall(8,  5,  7), ...vwall(8,  17, 19),
+      ...vwall(14, 9, 11), ...vwall(14, 13, 15),
+      ...vwall(20, 5,  7), ...vwall(20, 17, 19),
+      ...vwall(26, 9, 11), ...vwall(26, 13, 15),
+    ],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 3, row: 12 },
+    exitZone:   { col: 29, row: 12 },
+    collectibles: [[5,7],[5,17],[10,5],[10,19],[15,12],[18,7],[18,17],[23,5],[23,19],[27,12]] as [number,number][],
+  },
+];
 
-let gameMode: GameMode = 'explorer';
 let gameLevel: number = 1;
 
 type PowerUpKind = 'flashlight' | 'trap' | 'speed' | 'hint';
@@ -721,7 +368,7 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private initGame(): void {
-    const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
+    const config = LEVEL_CONFIGS[gameLevel - 1];
 
     this.glory = {
       x: config.gloryStart
@@ -807,6 +454,13 @@ class VenomArenaScene extends Phaser.Scene {
     this.joystickActive = false;
 
     this.startSnakeTimer(config.snakeTickMs);
+
+    // Show level banner text if configured
+    if (config.bannerText) {
+      this.overlayText.setText(config.bannerText);
+      this.overlayText.setVisible(true);
+      this.time.delayedCall(2500, () => { this.overlayText.setVisible(false); });
+    }
   }
 
   private startSnakeTimer(tickMs: number): void {
@@ -1090,6 +744,14 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
+    // Wind effect (Level 9)
+    if (LEVEL_CONFIGS[gameLevel - 1].windEffect) {
+      const windAngle = (this.exitPulseTimer * 0.04) % (Math.PI * 2);
+      const drift = 0.25;
+      this.glory.x = Math.max(0, Math.min(CANVAS_W, this.glory.x + Math.cos(windAngle) * drift));
+      this.glory.y = Math.max(0, Math.min(CANVAS_H, this.glory.y + Math.sin(windAngle) * drift));
+    }
+
     // Update bush-hide state and glory trail
     const gloryCol = Math.max(0, Math.min(COLS - 1, Math.floor(this.glory.x / CELL_SIZE)));
     const gloryRow = Math.max(0, Math.min(ROWS - 1, Math.floor(this.glory.y / CELL_SIZE)));
@@ -1162,7 +824,7 @@ class VenomArenaScene extends Phaser.Scene {
     }
 
     // Speed ramp
-    const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
+    const config = LEVEL_CONFIGS[gameLevel - 1];
     if (config.speedRamp) {
       this.speedRampTimer += delta;
       if (this.speedRampTimer >= 15000 && this.speedRampFactor < 2.5) {
@@ -1285,7 +947,7 @@ class VenomArenaScene extends Phaser.Scene {
     document.getElementById('challenge-overlay')?.classList.add('hidden');
 
     if (!this.roundOver) {
-      const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
+      const config = LEVEL_CONFIGS[gameLevel - 1];
       const tickMs = Math.max(80, Math.floor(config.snakeTickMs / this.speedRampFactor));
       this.startSnakeTimer(tickMs);
     }
@@ -1351,7 +1013,7 @@ class VenomArenaScene extends Phaser.Scene {
     const scoreEl = document.getElementById('glory-score-display');
     if (scoreEl) scoreEl.textContent = `Score: ${this.score}`;
 
-    const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
+    const config = LEVEL_CONFIGS[gameLevel - 1];
     const goal = config.survivalGoal;
     const progressBar = document.getElementById('survival-progress-bar');
     if (progressBar) {
@@ -1728,7 +1390,7 @@ class VenomArenaScene extends Phaser.Scene {
     this.bgGraphics.fillRect(0, riverY - 1, CANVAS_W, 2);
 
     // Walls — bamboo fence for Explorer, stone for Survivor/Legend
-    if (gameMode === 'explorer') {
+    if (gameLevel <= 2) {
       for (const key of this.walls) {
         const [col, row] = key.split(',').map(Number);
         const px = col * CELL_SIZE;
@@ -2161,10 +1823,10 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private winGame(): void {
-    const config = LEVEL_CONFIGS[gameMode][gameLevel - 1];
+    const config = LEVEL_CONFIGS[gameLevel - 1];
     this.score = Math.floor((this.survivalMs / 1000) * config.scoreMultiplier);
     this.updateDOM();
-    window.dispatchEvent(new CustomEvent('snake-level-complete', { detail: { mode: gameMode, level: gameLevel } }));
+    window.dispatchEvent(new CustomEvent('snake-level-complete', { detail: { level: gameLevel } }));
     this.showEndOverlay(`🏆 You Survived!\nScore: ${this.score}`, true);
   }
 
@@ -2194,10 +1856,9 @@ class VenomArenaScene extends Phaser.Scene {
   }
 }
 
-export function createGame(opts: { bodyColor?: number; headColor?: number; mode: GameMode; level: number }): GameController {
+export function createGame(opts: { bodyColor?: number; headColor?: number; level: number }): GameController {
   void opts.bodyColor;
   void opts.headColor;
-  gameMode  = opts.mode;
   gameLevel = opts.level;
 
   const game = new Phaser.Game({

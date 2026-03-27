@@ -4,8 +4,6 @@ import { loadGameModule } from './game-loader';
 import { startBgAnimation } from './bg-snakes';
 import packageJson from '../package.json';
 
-type GameMode = 'explorer' | 'survivor' | 'legend';
-
 const appVersion = import.meta.env.VITE_APP_VERSION || packageJson.version;
 
 let gameController: GameController | null = null;
@@ -15,10 +13,8 @@ let bgAnim: { stop: () => void; setColors: (b: string, h: string) => void } | nu
 
 let selectedBodyColor = 0xe74c3c;
 let selectedHeadColor = 0xff6b6b;
-let selectedMode: GameMode = 'explorer';
 let selectedLevel: number = 1;
 
-// ── DOM refs ──────────────────────────────────────────────────
 const startScreen  = document.getElementById('start-screen');
 const levelScreen  = document.getElementById('level-screen');
 const gameShell    = document.getElementById('game-shell');
@@ -43,60 +39,33 @@ function getGameModule(): Promise<typeof import('./game')> {
   return gameModulePromise;
 }
 
-// ── Mode + level metadata ────────────────────────────────────
-const MODE_META: Record<GameMode, {
-  icon: string; title: string; tagline: string;
-  levels: Array<{ name: string; speed: string }>;
-}> = {
-  explorer: {
-    icon: '🌿', title: 'Explorer Mode', tagline: 'Casual & relaxed · No revival',
-    levels: [
-      { name: 'Wanderer', speed: '🐢 Slow' },
-      { name: 'Tracker',  speed: '🐇 Medium' },
-      { name: 'Pioneer',  speed: '🚀 Fast' },
-    ],
-  },
-  survivor: {
-    icon: '⚔️', title: 'Survivor Mode', tagline: 'Answer trivia to revive · Medium speed',
-    levels: [
-      { name: 'Recruit', speed: '🐢 Slow' },
-      { name: 'Warrior', speed: '🐇 Medium' },
-      { name: 'Veteran', speed: '🚀 Fast' },
-    ],
-  },
-  legend: {
-    icon: '🔥', title: 'Legend Mode', tagline: 'One revival only · Blazing fast',
-    levels: [
-      { name: 'Spark',   speed: '🐇 Medium' },
-      { name: 'Blaze',   speed: '🚀 Fast' },
-      { name: 'Inferno', speed: '⚡ Blazing' },
-    ],
-  },
-};
+const LEVEL_META: Array<{ name: string; icon: string; desc: string; color: string }> = [
+  { name: 'Mountain Path',        icon: '🟢', desc: 'Learn controls · Wide road · No enemies',          color: 'easy' },
+  { name: 'Narrow Trail',         icon: '🟢', desc: 'Precision control · Thinner path · No enemies',     color: 'easy' },
+  { name: 'Bamboo Bridge',        icon: '🟡', desc: 'Careful movement · Very narrow · One mistake = fall', color: 'medium' },
+  { name: 'Split Paths',          icon: '🟡', desc: 'Decision making · Fork roads · Dead ends ahead',    color: 'medium' },
+  { name: 'First Enemy',          icon: '🟠', desc: 'Awareness · 1 slow enemy · Medium path',            color: 'hard' },
+  { name: 'Dark Forest',          icon: '🟠', desc: 'Limited vision · Fog of war · 1 enemy',             color: 'hard' },
+  { name: 'Cliff Edge Chaos',     icon: '🔴', desc: 'High pressure · Narrow curves · 2 enemies',         color: 'danger' },
+  { name: 'Maze Survival',        icon: '🔴', desc: 'Strategy · Complex maze · Dead ends everywhere',    color: 'danger' },
+  { name: 'Storm Mountain',       icon: '🔥', desc: 'Wind chaos · Obstacles · 3 fast enemies',           color: 'extreme' },
+  { name: 'FINAL: Serpent Arena', icon: '💀', desc: 'EVERYTHING · 4 enemies · Fast speed · No mercy',   color: 'extreme' },
+];
 
-const LEVEL_NAMES: Record<GameMode, string[]> = {
-  explorer: ['Basic Movement', 'Open Fields', 'Fences', 'First Maze', 'Mini Challenge'],
-  survivor: ['Intro Survival', 'Narrow Paths', 'Bamboo Bridge', 'Split Path', 'First Hunter', 'Dark Forest', 'Speed + Obstacles', 'Maze Survival', 'Multiple Enemies', 'Boss Stage'],
-  legend: ['Fast Start', 'Tight Corridor', 'Double Chase', 'IQ Gate Traps', 'Maze + Blind', 'Speed Ramp', 'Poison Zones', 'Multi Traps', 'Vision + Enemies', 'Mini Boss', 'Moving Obstacles', 'High-Speed Chase', 'IQ + Move Combo', 'No Safe Zones', 'FINAL VENOM ARENA'],
-};
-
-function getProgress(mode: GameMode): number[] {
-  try { return JSON.parse(localStorage.getItem(`venom_progress_${mode}`) ?? '[]') as number[]; }
+function getProgress(): number[] {
+  try { return JSON.parse(localStorage.getItem('venom_progress_campaign') ?? '[]') as number[]; }
   catch { return []; }
 }
-function saveProgress(mode: GameMode, level: number): void {
-  const p = getProgress(mode);
-  if (!p.includes(level)) { p.push(level); localStorage.setItem(`venom_progress_${mode}`, JSON.stringify(p)); }
+function saveProgress(level: number): void {
+  const p = getProgress();
+  if (!p.includes(level)) { p.push(level); localStorage.setItem('venom_progress_campaign', JSON.stringify(p)); }
 }
-function isLevelUnlocked(mode: GameMode, level: number): boolean {
-  if (mode === 'explorer' && level === 1) return true;
-  if (mode === 'survivor' && level === 1) return getProgress('explorer').includes(5);
-  if (mode === 'legend' && level === 1) return getProgress('survivor').includes(10);
-  return getProgress(mode).includes(level - 1);
+function isLevelUnlocked(level: number): boolean {
+  if (level === 1) return true;
+  return getProgress().includes(level - 1);
 }
 
-// ── Navigation helpers ────────────────────────────────────────
-function showModeSelect(): void {
+function showStartScreen(): void {
   levelScreen?.classList.add('hidden');
   gameShell?.classList.add('hidden');
   startScreen?.classList.remove('hidden');
@@ -104,24 +73,22 @@ function showModeSelect(): void {
   if (bgCanvas && !bgAnim) bgAnim = startBgAnimation(bgCanvas);
 }
 
-function showLevelScreen(mode: GameMode): void {
-  const meta = MODE_META[mode];
-  setText('level-mode-icon',    meta.icon);
-  setText('level-mode-title',   meta.title);
-  setText('level-mode-tagline', meta.tagline);
-
+function showLevelScreen(): void {
   const levelCards = document.getElementById('level-cards')!;
   levelCards.innerHTML = '';
-  const levelCount = { explorer: 5, survivor: 10, legend: 15 }[mode];
-  for (let i = 1; i <= levelCount; i++) {
+  for (let i = 1; i <= 10; i++) {
     const lvl = i;
-    const unlocked = isLevelUnlocked(mode, lvl);
+    const meta = LEVEL_META[lvl - 1];
+    const unlocked = isLevelUnlocked(lvl);
     const div = document.createElement('div');
-    div.className = `level-select-card${unlocked ? '' : ' locked'}`;
+    div.className = `level-select-card level-card-${meta.color}${unlocked ? '' : ' locked'}`;
     div.dataset.level = String(lvl);
     div.innerHTML = `
-      <span class="lvl-num">Lv ${lvl}</span>
-      <span class="lvl-name">${LEVEL_NAMES[mode][lvl - 1]}</span>
+      <span class="lvl-num">${meta.icon} ${lvl}</span>
+      <div class="lvl-info">
+        <span class="lvl-name">${meta.name}</span>
+        <span class="lvl-desc">${meta.desc}</span>
+      </div>
       <span class="lvl-lock">${unlocked ? '' : '🔒'}</span>
     `;
     if (unlocked) {
@@ -133,14 +100,12 @@ function showLevelScreen(mode: GameMode): void {
     levelCards.appendChild(div);
   }
 
-  levelScreen?.setAttribute('data-mode', mode);
   startScreen?.classList.add('hidden');
   levelScreen?.classList.remove('hidden');
   const lvlCanvas = document.getElementById('level-bg-canvas') as HTMLCanvasElement | null;
   if (lvlCanvas && !bgAnim) bgAnim = startBgAnimation(lvlCanvas);
 }
 
-// ── Start game ───────────────────────────────────────────────
 async function startGame(): Promise<void> {
   if (isStarting) return;
   if (gameController) {
@@ -153,7 +118,6 @@ async function startGame(): Promise<void> {
     gameController = createGame({
       bodyColor: selectedBodyColor,
       headColor: selectedHeadColor,
-      mode: selectedMode,
       level: selectedLevel,
     });
   } catch {
@@ -169,35 +133,26 @@ async function startGame(): Promise<void> {
   gameShell?.classList.remove('hidden');
 }
 
-// ── Event listeners ──────────────────────────────────────────
-
-// Mode card → level screen
-document.getElementById('mode-select')?.addEventListener('click', (e) => {
-  const card = (e.target as HTMLElement).closest<HTMLElement>('.mode-card');
-  if (!card || !card.dataset.mode) return;
-  selectedMode = card.dataset.mode as GameMode;
-  showLevelScreen(selectedMode);
-});
+// Play button → level select
+document.getElementById('play-btn')?.addEventListener('click', showLevelScreen);
 
 // Back button on level screen
-document.getElementById('back-to-modes')?.addEventListener('click', showModeSelect);
-
-// Level card clicks are set up per-card in showLevelScreen()
+document.getElementById('back-to-modes')?.addEventListener('click', showStartScreen);
 
 // Level-complete handler
 window.addEventListener('snake-level-complete', (e: Event) => {
-  const { mode, level } = (e as CustomEvent<{ mode: GameMode; level: number }>).detail;
-  saveProgress(mode, level);
+  const { level } = (e as CustomEvent<{ level: number }>).detail;
+  saveProgress(level);
 });
 
-// Menu button in game shell → back to mode select (destroys game)
+// Menu button → back to start
 document.getElementById('menu-button')?.addEventListener('click', () => {
   gameController?.destroy();
   gameController = null;
   gameShell?.classList.add('hidden');
   document.getElementById('retry-btn')?.classList.add('hidden');
   document.getElementById('next-level-btn')?.classList.add('hidden');
-  showModeSelect();
+  showStartScreen();
 });
 
 // Retry (same level on death)
@@ -206,18 +161,15 @@ document.getElementById('retry-btn')?.addEventListener('click', () => {
 });
 
 // Next Level (advance after winning)
-const MODE_MAX_LEVELS: Record<GameMode, number> = { explorer: 5, survivor: 10, legend: 15 };
 document.getElementById('next-level-btn')?.addEventListener('click', () => {
-  const maxLevel = MODE_MAX_LEVELS[selectedMode];
-  if (selectedLevel < maxLevel) {
+  if (selectedLevel < 10) {
     selectedLevel += 1;
     void startGame();
   } else {
-    // Last level of mode complete — go back to mode select
     gameController?.destroy();
     gameController = null;
     gameShell?.classList.add('hidden');
-    showModeSelect();
+    showStartScreen();
   }
 });
 
@@ -227,7 +179,7 @@ document.getElementById('about-button')?.addEventListener('click', openAbout);
 document.getElementById('close-about')?.addEventListener('click', closeAbout);
 aboutPanel?.addEventListener('click', (e) => { if (e.target === aboutPanel) closeAbout(); });
 
-// ── Init ─────────────────────────────────────────────────────
+// Init
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement | null;
 if (bgCanvas) bgAnim = startBgAnimation(bgCanvas);
 setVersionText();

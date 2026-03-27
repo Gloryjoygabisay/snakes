@@ -13,32 +13,9 @@
       <canvas id="bg-canvas" aria-hidden="true"></canvas>
 
       <h1 id="start-title">Venom Arena</h1>
-      <!-- Mode cards -->
-      <div id="mode-select">
-        <div class="mode-card explorer-card" data-mode="explorer">
-          <div class="mode-icon">🌿</div>
-          <div class="mode-info">
-            <div class="mode-name">Explorer Mode</div>
-            <div class="mode-tagline">Casual &amp; relaxed · No revival</div>
-          </div>
-          <div class="mode-badge easy-badge">Easy</div>
-        </div>
-        <div class="mode-card survivor-card" data-mode="survivor">
-          <div class="mode-icon">⚔️</div>
-          <div class="mode-info">
-            <div class="mode-name">Survivor Mode</div>
-            <div class="mode-tagline">Answer trivia to revive · Medium speed</div>
-          </div>
-          <div class="mode-badge medium-badge">Medium</div>
-        </div>
-        <div class="mode-card legend-card" data-mode="legend">
-          <div class="mode-icon">🔥</div>
-          <div class="mode-info">
-            <div class="mode-name">Legend Mode</div>
-            <div class="mode-tagline">One revival only · Blazing fast</div>
-          </div>
-          <div class="mode-badge hard-badge">Hard</div>
-        </div>
+      <div id="play-area">
+        <button id="play-btn" class="play-button">▶ PLAY</button>
+        <p class="play-tagline">10 levels · Simple to Legendary</p>
       </div>
 
       <div id="start-about-button-wrap">
@@ -53,13 +30,7 @@
 
       <div id="level-screen-inner">
         <button id="back-to-modes" class="back-button">← Back</button>
-        <div id="level-mode-header">
-          <span id="level-mode-icon">🌿</span>
-          <div>
-            <h2 id="level-mode-title">Explorer Mode</h2>
-            <p id="level-mode-tagline">Casual &amp; relaxed · No revival</p>
-          </div>
-        </div>
+        <h2 id="level-mode-title">🐍 Choose Your Level</h2>
 
         <div id="level-cards" class="level-list">
           <!-- dynamically populated by main.ts -->
