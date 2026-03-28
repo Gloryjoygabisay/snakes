@@ -14,6 +14,19 @@ interface BgSnake {
   t: number;       // per-snake time offset
 }
 
+/** A single large cute snake that bounces DVD-logo style around the canvas. */
+interface BounceSnake {
+  segs: Seg[];       // position trail — head is segs[0]
+  vx: number;        // velocity x (px/frame)
+  vy: number;        // velocity y (px/frame)
+  r: number;         // head radius
+  bodyColor: string;
+  headColor: string;
+  t: number;         // local timer (for tongue flick / eye blink)
+  scaleY: number;    // squeeze on bounce (1 = normal)
+  squeezeMs: number; // countdown for squeeze animation
+}
+
 const SEG_SPACING = 1.2; // multiplier of radius
 
 function hexToRgba(hex: string, a: number): string {
@@ -147,6 +160,120 @@ function drawSnake(ctx: CanvasRenderingContext2D, s: BgSnake): void {
   ctx.globalAlpha = 1;
 }
 
+function drawBounceSnake(ctx: CanvasRenderingContext2D, s: BounceSnake): void {
+  const n = s.segs.length;
+  if (n < 2) return;
+
+  const dx  = s.segs[0].x - s.segs[1].x;
+  const dy  = s.segs[0].y - s.segs[1].y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const fwd  = { x: dx / len, y: dy / len };
+  const perp = { x: -fwd.y,  y: fwd.x  };
+
+  const squeeze = s.scaleY; // < 1 = squished on bounce
+
+  ctx.save();
+  ctx.translate(s.segs[0].x, s.segs[0].y);
+  ctx.scale(1, squeeze);
+  ctx.translate(-s.segs[0].x, -s.segs[0].y);
+
+  // Draw body tail → head
+  for (let i = n - 1; i >= 0; i--) {
+    const seg  = s.segs[i];
+    const t    = i / (n - 1);               // 0 = head, 1 = tail
+    const r    = s.r * (1 - t * 0.52);      // taper
+    const alpha = 0.92 - t * 0.30;
+
+    // Connect to previous segment with a filled quad
+    if (i > 0) {
+      const prev = s.segs[i - 1];
+      const bdx = prev.x - seg.x;
+      const bdy = prev.y - seg.y;
+      const bl  = Math.sqrt(bdx * bdx + bdy * bdy) || 1;
+      const bnx =  bdy / bl;
+      const bny = -bdx / bl;
+      // Alternating stripe pattern
+      const stripe = i % 3 === 0
+        ? s.headColor
+        : i % 3 === 1 ? s.bodyColor : darken(s.bodyColor, 0.72);
+      ctx.fillStyle  = stripe;
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      ctx.moveTo(seg.x  + bnx * r, seg.y  + bny * r);
+      ctx.lineTo(prev.x + bnx * r, prev.y + bny * r);
+      ctx.lineTo(prev.x - bnx * r, prev.y - bny * r);
+      ctx.lineTo(seg.x  - bnx * r, seg.y  - bny * r);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Rounded segment circle
+    const col = i === 0
+      ? s.headColor
+      : (i % 3 === 0 ? s.headColor : i % 3 === 1 ? s.bodyColor : darken(s.bodyColor, 0.72));
+    ctx.fillStyle  = col;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(seg.x, seg.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ── Big cute eyes ──────────────────────────────────────────────────────────
+  const head = s.segs[0];
+  const eyeR = s.r * 0.38;
+  const eOff = s.r * 0.44;
+  for (const side of [-1, 1]) {
+    const ex = head.x + fwd.x * eOff * 0.7 + perp.x * eOff * side;
+    const ey = head.y + fwd.y * eOff * 0.7 + perp.y * eOff * side;
+    // White sclera with outline
+    ctx.fillStyle  = '#ffffff';
+    ctx.globalAlpha = 0.97;
+    ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth   = 1.2;
+    ctx.stroke();
+    // Coloured iris
+    ctx.fillStyle  = '#2d1aad';
+    ctx.globalAlpha = 0.90;
+    ctx.beginPath(); ctx.arc(ex + fwd.x * eyeR * 0.25, ey + fwd.y * eyeR * 0.25, eyeR * 0.60, 0, Math.PI * 2); ctx.fill();
+    // Pupil
+    ctx.fillStyle = '#000';
+    ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.arc(ex + fwd.x * eyeR * 0.30, ey + fwd.y * eyeR * 0.30, eyeR * 0.30, 0, Math.PI * 2); ctx.fill();
+    // Glint
+    ctx.fillStyle = '#fff';
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.arc(ex + fwd.x * eyeR * 0.10 - perp.x * eyeR * 0.18 * side, ey + fwd.y * eyeR * 0.10 - perp.y * eyeR * 0.18 * side, eyeR * 0.18, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ── Forked tongue (flicks every ~1.2 s) ───────────────────────────────────
+  const tonguePhase = (s.t % 1.2);
+  if (tonguePhase < 0.22) {
+    const prog      = tonguePhase / 0.22;
+    const tLen      = s.r * 1.8 * Math.sin(prog * Math.PI);
+    const forked    = s.r * 0.60;
+    const tx = head.x + fwd.x * (s.r + tLen * 0.55);
+    const ty = head.y + fwd.y * (s.r + tLen * 0.55);
+    ctx.strokeStyle  = '#ff44aa';
+    ctx.lineWidth    = Math.max(1.2, s.r * 0.16);
+    ctx.globalAlpha  = 0.88;
+    ctx.lineCap      = 'round';
+    ctx.beginPath();
+    ctx.moveTo(head.x + fwd.x * s.r * 0.9, head.y + fwd.y * s.r * 0.9);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx + fwd.x * forked + perp.x * forked * 0.75, ty + fwd.y * forked + perp.y * forked * 0.75);
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(tx + fwd.x * forked - perp.x * forked * 0.75, ty + fwd.y * forked - perp.y * forked * 0.75);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
 export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void; setColors: (body: string, head: string) => void } {
   const ctx = canvas.getContext('2d')!;
   let running = true;
@@ -177,6 +304,30 @@ export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void;
     makeSnake(W()*0.75,  -80,       Math.PI*0.55, '#fd9644', '#ffc870', 18, 1.9, 0.50, 0.36, 2.5, 20),
     makeSnake(W()*0.50,  H()+80,   -Math.PI*0.6,  '#00cc66', '#55ffc4', 15, 1.4, 0.80, 0.44, 4.8, 17),
   ];
+
+  // ── Bouncing star snake (DVD logo style) ────────────────────────────────────
+  const BOUNCE_R    = 22;
+  const BOUNCE_SEGS = 18;
+  const BOUNCE_SPD  = 2.8;   // px per frame
+  const bounceAngle = 0.72;  // initial travel angle (not axis-aligned → looks nicer)
+  const bouncerSegs: Seg[] = [];
+  for (let i = 0; i < BOUNCE_SEGS; i++) {
+    bouncerSegs.push({
+      x: W() * 0.5 - Math.cos(bounceAngle) * i * BOUNCE_R * SEG_SPACING,
+      y: H() * 0.5 - Math.sin(bounceAngle) * i * BOUNCE_R * SEG_SPACING,
+    });
+  }
+  const bouncer: BounceSnake = {
+    segs: bouncerSegs,
+    vx: Math.cos(bounceAngle) * BOUNCE_SPD,
+    vy: Math.sin(bounceAngle) * BOUNCE_SPD,
+    r: BOUNCE_R,
+    bodyColor: '#7CFF4F',
+    headColor: '#FF5AAE',
+    t: 0,
+    scaleY: 1,
+    squeezeMs: 0,
+  };
 
   function setColors(body: string, head: string): void {
     snakes.forEach((s, i) => {
@@ -229,6 +380,44 @@ export function startBgAnimation(canvas: HTMLCanvasElement): { stop: () => void;
 
       drawSnake(ctx, s);
     }
+
+    // ── Update + draw bouncing snake ────────────────────────────────────────
+    bouncer.t += dt;
+    if (bouncer.squeezeMs > 0) bouncer.squeezeMs = Math.max(0, bouncer.squeezeMs - dt * 1000);
+    // Ease squeeze back to 1
+    bouncer.scaleY = bouncer.squeezeMs > 0
+      ? 1 - 0.38 * Math.sin((bouncer.squeezeMs / 220) * Math.PI)
+      : 1;
+
+    // Move head
+    const bh = bouncer.segs[0];
+    bh.x += bouncer.vx;
+    bh.y += bouncer.vy;
+
+    // Wall bounce (reflect velocity, trigger squeeze)
+    const margin = bouncer.r * 0.9;
+    let bounced = false;
+    if (bh.x < margin)        { bh.x = margin;        bouncer.vx =  Math.abs(bouncer.vx); bounced = true; }
+    if (bh.x > W() - margin)  { bh.x = W() - margin;  bouncer.vx = -Math.abs(bouncer.vx); bounced = true; }
+    if (bh.y < margin)        { bh.y = margin;        bouncer.vy =  Math.abs(bouncer.vy); bounced = true; }
+    if (bh.y > H() - margin)  { bh.y = H() - margin;  bouncer.vy = -Math.abs(bouncer.vy); bounced = true; }
+    if (bounced) bouncer.squeezeMs = 220;
+
+    // Follow chain
+    for (let i = 1; i < bouncer.segs.length; i++) {
+      const p = bouncer.segs[i - 1];
+      const c = bouncer.segs[i];
+      const ddx = c.x - p.x;
+      const ddy = c.y - p.y;
+      const dist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+      const target = bouncer.r * SEG_SPACING * (1 - (i / bouncer.segs.length) * 0.30);
+      if (dist > target) {
+        c.x = p.x + (ddx / dist) * target;
+        c.y = p.y + (ddy / dist) * target;
+      }
+    }
+
+    drawBounceSnake(ctx, bouncer);
 
     animId = requestAnimationFrame(tick);
   }
