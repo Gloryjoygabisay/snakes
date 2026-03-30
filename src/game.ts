@@ -125,21 +125,21 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     gloryStart: { col: 0, row: 6 },   // outside the fence (col 0), just left of the entrance
     exitZone:   { col: 31, row: 20 }, // past the exit gate (exit is at col 30)
     collectibles: [
-      // Upper corridor — 6 apples (adjusted: [9,6] was on cliff wall → moved to [9,7])
+      // Upper corridor — 6 apples
       [3,6], [6,7], [9,7], [12,7], [15,6], [17,7],
       // Dead-end alcove rewards — 4 apples (risk vs. reward!)
       [4,10], [6,11], [5,12], [7,10],
       // Connector — 2 apples
       [18,11], [18,15],
-      // Lower corridor — 5 apples (adjusted: [23,19] was on S-curve wall → moved to [23,20])
+      // Lower corridor — 5 apples
       [21,20], [23,20], [25,20], [27,19], [29,20],
     ] as [number,number][],
     bushes: [[7, 6], [18, 14], [22, 20]],  // 3 hiding shelters along path
     snakeEnemyConfigs: [
       // 🟢 Slow Snakes (2) — plodding chasers, easy to outrun. Bright lime green.
-      //    (startRow moved: 6→7 because row 6 is now the cliff inner ceiling wall)
+      //    Row 7: below the cliff inner ceiling (row 6)
       { behavior: 'slow',   tickMs: 680, startCol: 10, startRow: 7,  color: 0x7CFF4F },
-      //    (startCol moved: 17→18 because col 17 is now the connector cliff wall at row 14)
+      //    Col 18: open column beside the connector cliff (col 17)
       { behavior: 'slow',   tickMs: 680, startCol: 18, startRow: 14, color: 0x4db82e },
       // 🟡 Patrol Snakes (2) — walk fixed routes; chase only if Glory steps within 4 cells. Gold/orange.
       { behavior: 'patrol', tickMs: 400, startCol:  5, startRow: 8,  color: 0xffcc00,
@@ -147,7 +147,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       { behavior: 'patrol', tickMs: 400, startCol: 18, startRow: 10, color: 0xff8800,
         patrolA: { col: 18, row: 9 }, patrolB: { col: 18, row: 16 } },
       // 🔴 Hunter Snakes (2) — aggressive, speed scales fast with apples. Hot pink / crimson.
-      //    (startRow moved: 19→20 because row 19 is now the S-curve inner wall at col 23)
+      //    Row 20: open row below the S-curve upper wall (row 19)
       { behavior: 'hunter', tickMs: 320, startCol: 23, startRow: 20, color: 0xFF5AAE },
       { behavior: 'hunter', tickMs: 320, startCol: 24, startRow: 21, color: 0xff2244 },
     ],
@@ -462,15 +462,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
 
 let gameLevel: number = 1;
 
-type PowerUpKind = 'flashlight' | 'trap' | 'speed' | 'hint' | 'pistol';
-
-interface Bullet {
-  x: number; y: number;    // start pixel
-  tx: number; ty: number;  // target pixel
-  progress: number;        // 0 → 1 travel animation
-  done: boolean;
-  targetId: number;        // snake id to stun on hit
-}
+type PowerUpKind = 'flashlight' | 'trap' | 'speed' | 'hint';
 
 interface Point { x: number; y: number; }
 
@@ -609,11 +601,6 @@ class VenomArenaScene extends Phaser.Scene {
   private exitGateOpenAnimMs = -1;      // -1 = closed; ≥0 = opening animation timer
   private hideAttemptCount = 0;     // wrong-answer streak on current hide riddle (resets at 3)
 
-  // Pistol power-up
-  private pistolPickups: Array<{ col: number; row: number; taken: boolean }> = [];
-  private pistolBullets = 0;
-  private bullets: Bullet[] = [];
-
   // Bite / fall animation
   private gloryFallMs = 0;    // counts down from 1200 → 0 after a snake bite
 
@@ -743,14 +730,7 @@ class VenomArenaScene extends Phaser.Scene {
     this.hideAttemptCount = 0;
     this.exitPulseTimer = 0;
 
-    // Pistol pickups — 2 guns hidden on the Level 1 path
-    this.pistolPickups = gameLevel === 1
-      ? [{ col: 7, row: 7, taken: false }, { col: 24, row: 20, taken: false }]
-      : [];
-    this.pistolBullets = 0;
-    this.bullets = [];
     this.gloryFallMs = 0;
-    this.updatePistolHUD();
 
     this.survivalMs = 0;
     this.score = 0;
@@ -930,13 +910,6 @@ class VenomArenaScene extends Phaser.Scene {
       this.domListeners.push({ el: susieBtn, event: 'click', fn });
     }
 
-    // Pistol fire button
-    const pistolBtn = document.getElementById('pistol-btn');
-    if (pistolBtn) {
-      const fn = () => { this.firePistol(); };
-      pistolBtn.addEventListener('click', fn);
-      this.domListeners.push({ el: pistolBtn, event: 'click', fn });
-    }
   }
 
   private tickSnakes(): void {
@@ -1409,27 +1382,6 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
-    // Pistol pickups
-    for (const p of this.pistolPickups) {
-      if (!p.taken && gc2.x === p.col && gc2.y === p.row) {
-        p.taken = true;
-        this.pistolBullets = Math.min(6, this.pistolBullets + 3);
-        this.updatePistolHUD();
-      }
-    }
-
-    // Advance bullet animations
-    for (const b of this.bullets) {
-      if (b.done) continue;
-      b.progress += delta / 140;  // ~140ms travel time
-      if (b.progress >= 1) {
-        b.done = true;
-        const target = this.snakes.find(s => s.id === b.targetId);
-        if (target && target.alive) target.stunnedMs = 2500;
-      }
-    }
-    this.bullets = this.bullets.filter(b => b.progress < 1.8);
-
     // Exit zone check — reach exit to win
     if (this.exitZone && gc2.x === this.exitZone.col && gc2.y === this.exitZone.row) {
       this.winGame();
@@ -1646,7 +1598,6 @@ class VenomArenaScene extends Phaser.Scene {
     trap: '🪤 Trap',
     speed: '⚡ Speed Boost',
     hint: '💡 Hint',
-    pistol: '🔫 Pistol',
   };
 
   private offerSusiePowerUp(): void {
@@ -1681,46 +1632,8 @@ class VenomArenaScene extends Phaser.Scene {
       this.waitingForTrapPlacement = true;
       this.activePowerUp = null;
     } else {
-      const durations: Record<PowerUpKind, number> = { flashlight: 8000, trap: 0, speed: 6000, hint: 4000, pistol: 0 };
+      const durations: Record<PowerUpKind, number> = { flashlight: 8000, trap: 0, speed: 6000, hint: 4000 };
       this.activePowerUp = { kind, msRemaining: durations[kind] };
-    }
-  }
-
-  // ── Pistol ─────────────────────────────────────────────────────────────────
-  private firePistol(): void {
-    if (this.pistolBullets <= 0 || this.roundOver) return;
-
-    // Find nearest emerged, non-retreating snake
-    let nearest: SnakeEnemy | null = null;
-    let minDist = Infinity;
-    for (const sn of this.snakes) {
-      if (!sn.alive || !sn.emerged || sn.retreating || sn.stunnedMs > 0) continue;
-      const hx = sn.segments[0].x * CELL_SIZE + CELL_SIZE / 2;
-      const hy = sn.segments[0].y * CELL_SIZE + CELL_SIZE / 2;
-      const d = Math.hypot(hx - this.glory.x, hy - this.glory.y);
-      if (d < minDist) { minDist = d; nearest = sn; }
-    }
-
-    if (!nearest) return;   // no valid target
-
-    this.pistolBullets--;
-    this.updatePistolHUD();
-
-    const tx = nearest.segments[0].x * CELL_SIZE + CELL_SIZE / 2;
-    const ty = nearest.segments[0].y * CELL_SIZE + CELL_SIZE / 2;
-    this.bullets.push({ x: this.glory.x, y: this.glory.y, tx, ty, progress: 0, done: false, targetId: nearest.id });
-  }
-
-  private updatePistolHUD(): void {
-    const btn = document.getElementById('pistol-btn');
-    const cnt = document.getElementById('pistol-count');
-    if (!btn || !cnt) return;
-    if (gameLevel === 1) {
-      btn.classList.remove('hidden');
-      cnt.textContent = String(this.pistolBullets);
-      btn.classList.toggle('empty', this.pistolBullets <= 0);
-    } else {
-      btn.classList.add('hidden');
     }
   }
 
@@ -1761,12 +1674,10 @@ class VenomArenaScene extends Phaser.Scene {
     this.drawCollectibles();
     this.drawBushes();
     if (gameLevel === 1) { this.drawSpawnBushes(); this.drawStartGate(); this.drawExitGate(); }
-    this.drawPistolPickups();
     this.drawExitZone();
     this.drawPoisonTiles();
     this.drawIQGates();
     this.drawSnakes();
-    this.drawBullets();
 
     if (this.activePowerUp?.kind === 'flashlight') {
       this.overlayGraphics.fillStyle(0x000000, 0.86);
@@ -1857,71 +1768,6 @@ class VenomArenaScene extends Phaser.Scene {
       this.bgGraphics.fillCircle(cx - 2, cy - 1, 2.5);
       this.bgGraphics.fillStyle(0xffffff, 0.25);
       this.bgGraphics.fillCircle(cx - 1, cy + 2, 1.5);
-    }
-  }
-
-  // ── Pistol pickups and bullets ───────────────────────────────────────────
-  private drawPistolPickups(): void {
-    const g = this.bgGraphics;
-    const pulse = 0.75 + 0.25 * Math.sin(this.exitPulseTimer / 380);
-    for (const p of this.pistolPickups) {
-      if (p.taken) continue;
-      const cx = p.col * CELL_SIZE + CELL_SIZE / 2;
-      const cy = p.row * CELL_SIZE + CELL_SIZE / 2;
-
-      // Glow ring
-      g.fillStyle(0xffcc00, 0.28 * pulse);
-      g.fillCircle(cx, cy, 12);
-
-      // Gun body (dark grey barrel + grip)
-      g.fillStyle(0x333333);
-      g.fillRoundedRect(cx - 9, cy - 3, 18, 6, 2);   // barrel + body
-      g.fillRoundedRect(cx - 2, cy + 3, 6, 7, 1);    // grip
-      // Highlight
-      g.fillStyle(0x888888, 0.55);
-      g.fillRect(cx - 8, cy - 2, 15, 2);
-      // Barrel tip
-      g.fillStyle(0x555555);
-      g.fillRect(cx + 8, cy - 2, 3, 4);
-
-      // Small star sparkle above
-      g.fillStyle(0xffee44, 0.90 * pulse);
-      g.fillCircle(cx, cy - 13, 3);
-      g.fillCircle(cx - 4, cy - 11, 1.5);
-      g.fillCircle(cx + 4, cy - 11, 1.5);
-    }
-  }
-
-  private drawBullets(): void {
-    const g = this.topGraphics;
-    for (const b of this.bullets) {
-      const t = Math.min(1, b.progress);
-      const bx = b.x + (b.tx - b.x) * t;
-      const by = b.y + (b.ty - b.y) * t;
-      const alpha = b.done ? Math.max(0, 1.8 - b.progress) : 1;
-
-      // Yellow bullet streak
-      g.lineStyle(3, 0xffee00, alpha * 0.9);
-      g.beginPath();
-      const tailT = Math.max(0, t - 0.18);
-      g.moveTo(b.x + (b.tx - b.x) * tailT, b.y + (b.ty - b.y) * tailT);
-      g.lineTo(bx, by);
-      g.strokePath();
-
-      // Bullet tip glow
-      g.fillStyle(0xffffff, alpha);
-      g.fillCircle(bx, by, 3.5);
-      g.fillStyle(0xffee00, alpha * 0.7);
-      g.fillCircle(bx, by, 6);
-
-      // Impact flash when done
-      if (b.done && b.progress < 1.5) {
-        const flash = (1.5 - b.progress) / 0.5;
-        g.fillStyle(0xffffff, flash * 0.9);
-        g.fillCircle(b.tx, b.ty, 10 * flash);
-        g.fillStyle(0xffee00, flash * 0.6);
-        g.fillCircle(b.tx, b.ty, 16 * flash);
-      }
     }
   }
 
