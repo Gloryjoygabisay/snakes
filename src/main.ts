@@ -42,7 +42,7 @@ function getGameModule(): Promise<typeof import('./game')> {
 // ── Level metadata (global level number → display info) ────────────────
 interface LevelMeta { name: string; desc: string; }
 const LEVEL_META: Record<number, LevelMeta> = {
-  1:  { name: 'Mountain Path',        desc: 'Learn controls · Wide road · No enemies' },
+  1:  { name: 'Fruit House Trap',      desc: 'Enter the house 🏠 · Eat fruits · Avoid snakes · Escape!' },
   2:  { name: 'Narrow Trail',         desc: 'Precision control · Thinner path · No enemies' },
   3:  { name: 'Bamboo Bridge',        desc: 'Very narrow · One mistake = fall 🌉' },
   4:  { name: 'Split Paths',          desc: 'Fork roads · Dead ends · No enemies' },
