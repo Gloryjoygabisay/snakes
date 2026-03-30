@@ -1298,6 +1298,46 @@ kbd {
   font-weight: 600;
 }
 
+#stealth-indicator {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #44ff88;
+  text-shadow: 0 0 8px rgba(68, 255, 136, 0.6);
+  animation: stealth-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stealth-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%       { opacity: 1; }
+}
+
+#berserk-indicator {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #ff3333;
+  text-shadow: 0 0 8px rgba(255, 50, 50, 0.8);
+  animation: berserk-pulse 0.4s ease-in-out infinite;
+}
+
+@keyframes berserk-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
+#escape-rush-indicator {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffdd44;
+  text-shadow: 0 0 10px rgba(255, 200, 30, 0.9);
+  animation: escape-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes escape-pulse {
+  0%, 100% { opacity: 0.7; letter-spacing: 0; }
+  50%       { opacity: 1;   letter-spacing: 0.04em; }
+}
+
 /* Susie bubble */
 .susie-bubble {
   display: flex;

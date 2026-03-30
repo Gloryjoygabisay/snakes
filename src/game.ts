@@ -31,6 +31,10 @@ const CHALLENGES: Challenge[] = [
   { q: 'I have no voice, yet I speak.\nI have no eyes, yet I warn.\nWhat am I?', choices: ['A shadow', 'A sign', 'A snake', 'A storm'], answer: 1 },
   { q: 'I can swallow you whole\nbut have no mouth.\nWhat am I?', choices: ['Fear', 'A cave', 'Silence', 'Darkness'], answer: 1 },
   { q: 'Alive without breath,\ncold as death.\nSlithering yet not a snake.\nWhat am I?', choices: ['A river', 'A ghost', 'Ice', 'Mist'], answer: 0 },
+  // Fruit House puzzles — unlock the exit door in Level 1 (indices 15–17)
+  { q: '🍎 🍌 🍓 🍎 🍌 ?\n(What fruit comes next in the pattern?)', choices: ['🍎 Apple', '🍓 Berry', '🍌 Banana'], answer: 1 },
+  { q: 'Which fruit makes Glory\ninvisible to snakes?', choices: ['🍌 Banana', '🍓 Berry', '🍎 Apple'], answer: 1 },
+  { q: 'Which fruit restores\nGlory\'s health?', choices: ['🍌 Banana', '🍓 Berry', '🍎 Apple'], answer: 2 },
 ];
 
 function hwall(row: number, c1: number, c2: number): [number, number][] {
@@ -47,7 +51,7 @@ function vwall(col: number, r1: number, r2: number): [number, number][] {
 interface IQGateConfig { col: number; row: number; challengeIdx: number; }
 interface MovingWallConfig { col: number; row: number; col2: number; row2: number; intervalMs: number; }
 
-type SnakeBehavior = 'chaser' | 'random' | 'guard' | 'slow' | 'patrol' | 'hunter';
+type SnakeBehavior = 'chaser' | 'random' | 'guard' | 'slow' | 'patrol' | 'hunter' | 'sleeper' | 'sentry';
 interface SnakeEnemyConfig {
   behavior: SnakeBehavior;
   tickMs: number;     // ms per move step
@@ -76,7 +80,7 @@ interface LevelConfig {
   speedRamp: boolean;
   // Optional: exit-based win instead of survival timer
   exitZone?: { col: number; row: number };
-  collectibles?: [number, number][];
+  collectibles?: [number, number, FruitKind?][];
   gloryStart?: { col: number; row: number };
   bushes?: [number, number][];
   bannerText?: string;      // shown as popup text when level starts (e.g. Level 3)
@@ -84,52 +88,100 @@ interface LevelConfig {
   reversedControls?: boolean; // Mirror Maze: joystick direction is inverted
   isBonus?: boolean;          // marks as bonus level
   snakeEnemyConfigs?: SnakeEnemyConfig[];  // per-snake behavior overrides (replaces snakeCount when set)
+  houseLayout?: boolean;      // renders as an indoor house with interior background (no start gate)
 }
 
 const LEVEL_CONFIGS: LevelConfig[] = [
-  // Level 1: Mountain Path — Z-shaped winding cliff trail (6 snakes, hiding shelters, escape gate)
+  // Level 1: Fruit House Trap — Glory enters a house full of fruits... and snakes
+  //
+  //  Layout (cols 3–28, rows 2–21)
+  //  ┌──────────────────────────────────────────────────────┐
+  //  │  [NW ROOM]   col12│hallway│col15   [NE ROOM]         │
+  //  │  cols 4–11   ─────┤13–14  ├─────   cols 16–27        │
+  //  │  ┌─pocket─┐  row5↕│       │↕row5   ┌────pocket───┐   │
+  //  │  │rows 3–4│  ─────┤       ├─────   │ rows 3–4    │   │
+  //  │  │(berry) │       │       │        │cols 21–27   │   │
+  //  │  └──row5──┘       │       │        │  (berry)    │   │
+  //  │   (wall 4–7)      │       │        └──row5──(21–27)  │
+  //  │  rows 6–7  ───────┴───────┴────────   rows 6–7       │
+  //  ├──row8──[gap8–9]──────────────────[gap22–23]──row8────┤
+  //  ░  ←entry     MAIN CORRIDOR (rows 9–11)      exit→  ░
+  //  ├──row12─[gap8–9]──────────────────[gap22–23]──row12───┤
+  //  │  [SW ROOM]        center hallway            [SE ROOM] │
+  //  │  rows 13–17  ─────┤13–14  ├─────   rows 13–17        │
+  //  │                row15↕│       │↕row15                  │
+  //  │  rows 18–20  ─────┤       ├─────   rows 18–20        │
+  //  │  ┌─pocket──┐ (wall 4–7)    (wall 22–27)  ┌──pocket─┐ │
+  //  │  │rows19–20│                              │rows19–20│ │
+  //  │  │ (apple) │                              │(banana) │ │
+  //  └──────────────────────────────────────────────────────┘
   {
-    name: 'Mountain Path',
-    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-    bannerText: '🏔️ VENOM ARENA\nMOUNTAIN PATH',
+    name: 'Fruit House Trap',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.8, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    houseLayout: true,
+    bannerText: '🏠 FRUIT HOUSE TRAP\nEat wisely. Escape alive.',
     walls: [
-      // Upper segment — horizontal corridor rows 5-8 (walls top row4, bottom row9)
-      ...hwall(4,  1, 19),   // top wall:    row 4,  cols 1-19
-      ...hwall(9,  1, 15),   // bottom wall: row 9,  cols 1-15 (gap at 16-19 for turn)
-      // Connector — vertical corridor cols 17-19 (walls right col20, left col16)
-      ...vwall(20, 5, 17),   // right wall:  col 20, rows 5-17
-      ...vwall(16, 10, 17),  // left wall:   col 16, rows 10-17
-      // Lower segment — horizontal corridor rows 19-21 (walls top row18, bottom row22)
-      ...hwall(18, 20, 31),  // top wall:    row 18, cols 20-31 (gap at 16-19 = connector entry)
-      ...hwall(22, 16, 31),  // bottom wall: row 22, cols 16-31
-      ...vwall(16, 19, 21),  // left wall:   col 16, rows 19-21
+      // ── OUTER PERIMETER ──────────────────────────────────────────────────────
+      ...hwall(2,  3, 28),                              // top wall
+      ...hwall(21, 3, 28),                              // bottom wall
+      ...vwall(3,  2,  8), ...vwall(3,  12, 21),        // left wall  (entry gap rows 9–11)
+      ...vwall(28, 2,  8), ...vwall(28, 12, 21),        // right wall (exit gap rows 9–11)
+
+      // ── UPPER/LOWER ZONE SEPARATORS (rows 8 & 12) ───────────────────────────
+      // gaps: cols 8–9 (NW/SW doorway), cols 13–14 (center hallway pass-through), cols 22–23 (NE/SE doorway)
+      ...hwall(8,  4,  7), ...hwall(8,  10, 11), ...hwall(8,  16, 21), ...hwall(8,  24, 27),
+      ...hwall(12, 4,  7), ...hwall(12, 10, 11), ...hwall(12, 16, 21), ...hwall(12, 24, 27),
+
+      // ── CENTER VERTICAL HALLWAY WALLS (cols 12 & 15) ─────────────────────────
+      // Narrow 2-cell hallway (cols 13–14) connecting top & bottom zones
+      // Left wall (col 12): gap at rows 5–6 (NW↔hallway) and rows 15–16 (SW↔hallway)
+      ...vwall(12, 3, 4), ...vwall(12, 7, 8), ...vwall(12, 13, 14), ...vwall(12, 17, 20),
+      // Right wall (col 15): gap at rows 5–6 (hallway↔NE) and rows 15–16 (hallway↔SE)
+      ...vwall(15, 3, 4), ...vwall(15, 7, 8), ...vwall(15, 13, 14), ...vwall(15, 17, 20),
+
+      // ── DEAD-END ALCOVES (hidden pockets for risky fruit grabs) ──────────────
+      // NW pocket (rows 3–4, cols 4–11): entry via cols 8–11 at row 5 only
+      ...hwall(5, 4, 7),
+      // NE pocket (rows 3–4, cols 21–27): entry via cols 16–20 at row 5, then right
+      ...hwall(5, 21, 27),
+      // SW pocket (rows 19–20, cols 4–11): entry via cols 8–11 at row 18, then left
+      ...hwall(18, 4, 7),
+      // SE pocket (rows 19–20, cols 22–27): entry via col 21 at row 18, then right
+      ...hwall(18, 22, 27),
     ],
-    poisonTiles: [],
-    iqGatePositions: [{ col: 30, row: 20, challengeIdx: 10 }],   // moved to exit end
-    movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 0, row: 6 },   // outside the fence (col 0), just left of the entrance
-    exitZone:   { col: 31, row: 20 }, // past the exit gate (exit is at col 30)
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
+    gloryStart: { col: 1, row: 10 },
+    exitZone:   { col: 29, row: 10 },
+    // 🍎 Apple → +health · 🍌 Banana → speed boost · 🍓 Berry → invisibility
     collectibles: [
-      // Upper corridor (rows 5–8, cols 1–19) — 6 apples
-      [3,6], [6,7], [9,6], [12,7], [15,6], [17,7],
-      // Connector (cols 17–19, rows 9–17) — 2 apples
-      [18,11], [18,15],
-      // Lower corridor (rows 19–21, cols 17–31) — 5 apples
-      [21,20], [23,19], [25,20], [27,19], [29,20],
-    ] as [number,number][],
-    bushes: [[7, 6], [18, 14], [22, 20]],  // 3 hiding shelters along path
+      [5,  3,  'berry'],   // NW pocket  — berry tucked in dead-end (sleeper snake nearby!)
+      [9,  6,  'banana'],  // NW room    — banana for speed dashes
+      [8,  10, 'apple'],   // corridor L — health pickup in open ground
+      [13, 6,  'banana'],  // center hallway — banana (sentry blocks this route!)
+      [22, 10, 'apple'],   // corridor R — health pickup
+      [25, 4,  'berry'],   // NE pocket  — invisibility berry behind sentry!
+      [18, 6,  'banana'],  // NE room    — banana
+      [7,  16, 'apple'],   // SW room    — apple
+      [5,  19, 'apple'],   // SW pocket  — apple in dead-end (sleeper nearby)
+      [18, 15, 'berry'],   // SE room    — berry near hallway junction
+      [24, 19, 'banana'],  // SE pocket  — banana (sleeper coiled here!)
+    ] as [number, number, FruitKind][],
+    bushes: [[9, 10], [20, 10]],  // two hiding spots along the main corridor
     snakeEnemyConfigs: [
-      // 🟢 Slow Snakes (2) — plodding chasers, easy to outrun. Bright lime green.
-      { behavior: 'slow',   tickMs: 680, startCol: 10, startRow: 6,  color: 0x7CFF4F },
-      { behavior: 'slow',   tickMs: 680, startCol: 17, startRow: 14, color: 0x4db82e },
-      // 🟡 Patrol Snakes (2) — walk fixed routes; chase only if Glory steps within 4 cells. Gold/orange.
-      { behavior: 'patrol', tickMs: 400, startCol:  5, startRow: 8,  color: 0xffcc00,
-        patrolA: { col: 3,  row: 7 }, patrolB: { col: 15, row: 7 } },
-      { behavior: 'patrol', tickMs: 400, startCol: 18, startRow: 10, color: 0xff8800,
-        patrolA: { col: 18, row: 9 }, patrolB: { col: 18, row: 16 } },
-      // 🔴 Hunter Snakes (2) — aggressive, speed scales fast with apples. Hot pink / crimson.
-      { behavior: 'hunter', tickMs: 320, startCol: 23, startRow: 19, color: 0xFF5AAE },
-      { behavior: 'hunter', tickMs: 320, startCol: 24, startRow: 21, color: 0xff2244 },
+      // 🟢 Sleeper — NW pocket, coiled by the berry; wakes when Glory reaches dead-end
+      { behavior: 'sleeper', tickMs: 560, startCol: 6,  startRow: 3,  color: 0x7CFF4F },
+      // 🟢 Sleeper — SE pocket, coiled by the banana; blocks exit from corner
+      { behavior: 'sleeper', tickMs: 540, startCol: 23, startRow: 19, color: 0x4db82e },
+      // 🟡 Patrol — NW room lower area, back-and-forth horizontal sweep
+      { behavior: 'patrol', tickMs: 580, startCol: 7,  startRow: 6,  color: 0xffcc00,
+        patrolA: { col: 4, row: 6 }, patrolB: { col: 11, row: 6 } },
+      // 🟡 Patrol — NE room, roams between open area and pocket approach (unpredictable!)
+      { behavior: 'patrol', tickMs: 560, startCol: 18, startRow: 6,  color: 0xff8800,
+        patrolA: { col: 16, row: 3 }, patrolB: { col: 20, row: 7 } },
+      // 🔴 Sentry — center hallway (only 2 cells wide!), charges anyone trying to shortcut
+      { behavior: 'sentry', tickMs: 250, startCol: 14, startRow: 6,  color: 0xff2244 },
+      // 🔴 Sentry — NE pocket entrance, guards the invisibility berry at [25,4]
+      { behavior: 'sentry', tickMs: 240, startCol: 24, startRow: 4,  color: 0xFF5AAE },
     ],
   },
   // Level 2: Narrow Trail — thinner path, more curves, no enemies
@@ -442,7 +494,8 @@ const LEVEL_CONFIGS: LevelConfig[] = [
 
 let gameLevel: number = 1;
 
-type PowerUpKind = 'flashlight' | 'trap' | 'speed' | 'hint' | 'pistol';
+type PowerUpKind = 'flashlight' | 'trap' | 'speed' | 'hint' | 'pistol' | 'stick' | 'smoke';
+type FruitKind = 'apple' | 'banana' | 'berry';
 
 interface Bullet {
   x: number; y: number;    // start pixel
@@ -466,6 +519,7 @@ interface SnakeEnemy {
   tickAccumMs: number;       // accumulated ms since last step
   emerged: boolean;          // false = hiding in spawn bush, waiting for Glory
   retreating: boolean;       // true = heading back to spawn bush
+  awake: boolean;            // false = sleeping (sleeper behavior only); wakes on proximity
   spawnCol: number;          // bush spawn position
   spawnRow: number;
   baseTick: number;          // original tick speed used for progressive scaling
@@ -528,6 +582,9 @@ class VenomArenaScene extends Phaser.Scene {
 
   private joystickActive = false;
   private dragDir: { dx: number; dy: number } | null = null;
+  private joystickDist = 0;          // raw deflection magnitude (0–39); used for stealth detection
+  private gloryStealthMode = false;  // true when sneaking (slow + reduced snake detection radius)
+  private shiftKeyDown = false;      // keyboard: hold Shift to sneak
   private gloryTrail: Array<{x: number; y: number}> = [];
   private gloryTrailMax = 2;  // starts small, grows as apples are eaten
 
@@ -538,6 +595,17 @@ class VenomArenaScene extends Phaser.Scene {
   private roundOver = false;
 
   private activePowerUp: ActivePowerUp | null = null;
+  private berryInvisibleMs = 0;   // countdown for berry invisibility (snakes can't see Glory)
+  private smokeActiveMs = 0;      // countdown for smoke bomb — full invisibility (even up-close)
+  private stickSwingMs = 0;       // brief visual flash after stick swing
+  private houseKey: { col: number; row: number; taken: boolean } | null = null;
+  private escapeRushActive = false;
+  private escapeRushMs = 0;       // counts up once rush begins (for visual effects)
+  // ── Audio (Web Audio API — no external files needed) ─────────────────────
+  private audioCtx: AudioContext | null = null;
+  private snakeHissTimerMs = 0;   // cooldown between hiss sounds
+  private footstepTimerMs = 0;    // cooldown between footstep ticks
+  private jumpScareFlashMs = 0;   // white flash countdown after sleeper wakes
   private trap: TrapState | null = null;
   private waitingForTrapPlacement = false;
 
@@ -569,7 +637,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   // Exit-zone + collectible system
   private exitZone: { col: number; row: number } | null = null;
-  private collectibles: Array<{ col: number; row: number; collected: boolean }> = [];
+  private collectibles: Array<{ col: number; row: number; collected: boolean; kind: FruitKind }> = [];
   private bushCells: Set<string> = new Set();
   private hiddenInBush = false;
   private hidingSuccess = false;          // true only after correctly answering the hide challenge
@@ -577,8 +645,12 @@ class VenomArenaScene extends Phaser.Scene {
   private bushChallengeAnswered = false;  // prevents re-triggering while inside same bush
   private hidingSearchMs = 0;            // penalty countdown after a failed hide answer (ms remaining)
   private readonly HIDING_DURATION_MS = 4500;
-  private challengeType: 'iqgate' | 'hide' | null = null;
+  private challengeType: 'iqgate' | 'hide' | 'fruitpuzzle' | null = null;
   private pendingHideChallenge: Challenge | null = null;
+  private fruitPuzzleChallenge: Challenge | null = null;
+  private exitPuzzleSolved = false;
+  private snakePenaltyMs = 0;
+  private fruitPuzzleCooldownMs = 0;
   private usePerSnakeTick = false;
   private facingAngle = 0;
   private exitPulseTimer = 0;
@@ -679,7 +751,7 @@ class VenomArenaScene extends Phaser.Scene {
       col: g.col,
       row: g.row,
       open: false,
-      challenge: gameLevel === 1
+      challenge: gameLevel === 1 && !config.houseLayout
         ? CHALLENGES[10 + Math.floor(Math.random() * 5)]
         : CHALLENGES[g.challengeIdx % CHALLENGES.length],
     }));
@@ -708,7 +780,7 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Exit zone + collectibles
     this.exitZone = config.exitZone ?? null;
-    this.collectibles = (config.collectibles ?? []).map(([col, row]) => ({ col, row, collected: false }));
+    this.collectibles = (config.collectibles ?? []).map(([col, row, kind]) => ({ col, row, collected: false, kind: kind ?? 'apple' }));
     this.bushCells = new Set((config.bushes ?? []).map(([c, r]) => `${c},${r}`));
     this.hiddenInBush = false;
     this.hidingSuccess = false;
@@ -716,15 +788,26 @@ class VenomArenaScene extends Phaser.Scene {
     this.bushChallengeAnswered = false;
     this.hidingSearchMs = 0;
     this.hideSuccessTimerMs = 0;
-    this.gateOpen = (gameLevel !== 1);   // Level 1 starts locked; all others open
+    this.gateOpen = config.houseLayout ? true : (gameLevel !== 1);   // house/non-L1 start open; old L1 locked
     this.gateOpenAnimMs = 0;
     this.applesCollected = 0;
     this.exitGateOpenAnimMs = -1;
     this.hideAttemptCount = 0;
     this.exitPulseTimer = 0;
+    this.exitPuzzleSolved = false;
+    this.snakePenaltyMs = 0;
+    this.fruitPuzzleCooldownMs = 0;
+    this.fruitPuzzleChallenge = null;
+
+    // House layout: add exit blocker walls (col 25, rows 9–11) removed on puzzle solve
+    if (config.houseLayout) {
+      this.walls.add('25,9');
+      this.walls.add('25,10');
+      this.walls.add('25,11');
+    }
 
     // Pistol pickups — 2 guns hidden on the Level 1 path
-    this.pistolPickups = gameLevel === 1
+    this.pistolPickups = (gameLevel === 1 && !config.houseLayout)
       ? [{ col: 7, row: 7, taken: false }, { col: 24, row: 20, taken: false }]
       : [];
     this.pistolBullets = 0;
@@ -736,11 +819,26 @@ class VenomArenaScene extends Phaser.Scene {
     this.score = 0;
     this.roundOver = false;
     this.activePowerUp = null;
+    this.berryInvisibleMs = 0;
+    this.smokeActiveMs = 0;
+    this.stickSwingMs = 0;
+    this.escapeRushActive = false;
+    this.escapeRushMs = 0;
+    this.snakeHissTimerMs = 0;
+    this.footstepTimerMs = 0;
+    this.jumpScareFlashMs = 0;
+    this.houseKey = config.houseLayout
+      ? { col: 20, row: 17, taken: false }  // hidden in SE room
+      : null;
     this.trap = null;
     this.waitingForTrapPlacement = false;
     this.susieCooldownMs = 5000;
     this.susieOfferActive = false;
     this.spawnAccumMs = 0;
+    // House layout gets tools suited for close-quarters combat; other levels get exploration tools
+    this.POWER_UP_ROTATION = config.houseLayout
+      ? ['stick', 'smoke', 'trap', 'speed']
+      : ['flashlight', 'trap', 'speed', 'hint'];
     this.dragDir = null;
     this.facingAngle = 0;    // start facing right; first drag will smoothly turn Glory
     this.joystickActive = false;
@@ -788,14 +886,16 @@ class VenomArenaScene extends Phaser.Scene {
 
     const segs: Point[] = Array.from({ length: 4 }, () => ({ x: hx, y: hy }));
     const useBushSpawn = this.usePerSnakeTick && !!cfg;
+    const isSleeper = cfg?.behavior === 'sleeper';
     this.snakes.push({
       id, segments: segs, alive: true, stunnedMs: 0, color, isBoss,
       behavior: cfg?.behavior ?? 'chaser',
       tickMs: cfg?.tickMs ?? 600,
       baseTick: cfg?.tickMs ?? 600,
       tickAccumMs: Math.random() * (cfg?.tickMs ?? 600),
-      emerged: !useBushSpawn,    // Level 1 snakes start hidden in their bushes
+      emerged: isSleeper ? true : !useBushSpawn,  // sleepers visible from the start; others hide in bushes
       retreating: false,
+      awake: !isSleeper,   // sleepers start asleep; all others are already "awake"
       spawnCol: hx,
       spawnRow: hy,
       patrolA: cfg?.patrolA ? { x: cfg.patrolA.col, y: cfg.patrolA.row } : { x: hx, y: hy },
@@ -856,6 +956,7 @@ class VenomArenaScene extends Phaser.Scene {
       activePtrId = null;
       this.joystickActive = false;
       this.dragDir = null;
+      this.joystickDist = 0;
       knob.style.transform = 'translate(-50%, -50%)';
       knob.classList.remove('active');
     };
@@ -866,6 +967,7 @@ class VenomArenaScene extends Phaser.Scene {
       let dx = clientX - cx;
       let dy = clientY - cy;
       const dist = Math.hypot(dx, dy);
+      this.joystickDist = Math.min(dist, KNOB_MAX);
       if (dist > KNOB_MAX) {
         dx = (dx / dist) * KNOB_MAX;
         dy = (dy / dist) * KNOB_MAX;
@@ -917,6 +1019,14 @@ class VenomArenaScene extends Phaser.Scene {
       pistolBtn.addEventListener('click', fn);
       this.domListeners.push({ el: pistolBtn, event: 'click', fn });
     }
+
+    // Keyboard Shift = sneak (hold to enter stealth mode)
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') this.shiftKeyDown = true; };
+    const onKeyUp   = (e: KeyboardEvent) => { if (e.key === 'Shift') this.shiftKeyDown = false; };
+    window.addEventListener('keydown', onKeyDown as EventListener);
+    window.addEventListener('keyup',   onKeyUp   as EventListener);
+    this.domListeners.push({ el: window, event: 'keydown', fn: onKeyDown as EventListener });
+    this.domListeners.push({ el: window, event: 'keyup',   fn: onKeyUp   as EventListener });
   }
 
   private tickSnakes(): void {
@@ -970,11 +1080,11 @@ class VenomArenaScene extends Phaser.Scene {
       return;
     }
 
-    // ── Waiting: emerge when triggered (Level 1 = first apple; others = gate + proximity) ─
+    // ── Waiting: emerge when triggered (non-default L1 = first fruit; others = gate + proximity) ─
     if (!snake.emerged) {
       let canEmerge: boolean;
-      if (gameLevel === 1) {
-        canEmerge = this.applesCollected > 0;   // any apple eaten → all snakes notice
+      if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) {
+        canEmerge = this.applesCollected > 0;   // any fruit eaten → all snakes notice
       } else {
         const distToGlory = Math.abs(head.x - gc.x) + Math.abs(head.y - gc.y);
         canEmerge = this.gateOpen && distToGlory <= 6;
@@ -992,6 +1102,12 @@ class VenomArenaScene extends Phaser.Scene {
     // Snakes lose the player's exact location while she's hidden — unless the
     // hiding timer has expired (they start searching her last known position).
     const effectivelyHidden = this.hiddenInBush && this.hidingSuccess;
+    // Smoke bomb — full invisibility, even up close (unlike stealth which only works >2.5 cells)
+    const smokeHidden = this.smokeActiveMs > 0;
+    // Stealth: sneaking Glory is undetectable to snakes more than 2.5 cells away
+    const stealthDist = Math.hypot(head.x - gc.x, head.y - gc.y);
+    const stealthHidden = this.gloryStealthMode && stealthDist > 2.5;
+    const undetected = effectivelyHidden || smokeHidden || stealthHidden;
 
     const tryMove = (cx: number, cy: number): void => {
       // Try primary axis first, then secondary
@@ -1021,7 +1137,7 @@ class VenomArenaScene extends Phaser.Scene {
 
     if (snake.behavior === 'slow') {
       // 🟢 Slow Snake: plodding chaser — always moves toward Glory, never speeds up
-      if (effectivelyHidden) {
+      if (undetected) {
         randomStep();
       } else {
         tryMove(gc.x, gc.y);
@@ -1030,7 +1146,7 @@ class VenomArenaScene extends Phaser.Scene {
     } else if (snake.behavior === 'hunter') {
       // 🔴 Hunter Snake: hyper-aggressive chaser — already scaled by apple factor in tickMs;
       //    uses 80% chase / 20% random to avoid getting permanently wall-stuck
-      if (effectivelyHidden) {
+      if (undetected) {
         randomStep();
       } else {
         if (Math.random() < 0.80) {
@@ -1043,7 +1159,7 @@ class VenomArenaScene extends Phaser.Scene {
     } else if (snake.behavior === 'patrol') {
       // 🟡 Patrol Snake: walks between two fixed waypoints; only chases when Glory is within 4 cells
       const distFromPlayer = Math.hypot(head.x - gc.x, head.y - gc.y);
-      if (!effectivelyHidden && distFromPlayer <= 4) {
+      if (!undetected && distFromPlayer <= 4) {
         // Player too close — break pattern and chase
         tryMove(gc.x, gc.y);
       } else {
@@ -1059,7 +1175,7 @@ class VenomArenaScene extends Phaser.Scene {
       }
 
     } else if (snake.behavior === 'random') {
-      if (effectivelyHidden) {
+      if (undetected) {
         randomStep();
       } else {
         // 45% chance to chase, 55% random — unpredictable but threatening
@@ -1074,7 +1190,7 @@ class VenomArenaScene extends Phaser.Scene {
       const exitY = this.exitZone?.row ?? gc.y;
       const distFromExit = Math.hypot(head.x - exitX, head.y - exitY);
       const distFromPlayer = Math.hypot(head.x - gc.x, head.y - gc.y);
-      if (!effectivelyHidden && distFromPlayer < 7) {
+      if (!undetected && distFromPlayer < 7) {
         // Player is close — chase them
         tryMove(gc.x, gc.y);
       } else if (distFromExit > 6) {
@@ -1084,9 +1200,49 @@ class VenomArenaScene extends Phaser.Scene {
         // Patrol: random walk within guard radius
         randomStep();
       }
+
+    } else if (snake.behavior === 'sleeper') {
+      // 🟢 Sleeping snake — lies perfectly still until Glory steps within 3 cells, then lunges
+      //    Stealth halves the wake radius — careful sneaking lets Glory grab nearby fruit!
+      if (!snake.awake) {
+        const distToGlory = Math.abs(head.x - gc.x) + Math.abs(head.y - gc.y);
+        const wakeRadius = this.gloryStealthMode ? 1.5 : 3;
+        if (distToGlory <= wakeRadius) {
+          snake.awake = true;    // wake up! now hunts aggressively
+          snake.tickMs = Math.max(180, Math.floor(snake.baseTick * 0.55));  // speed burst on wake
+          // Jump scare: sound stab + camera shake + white flash
+          this.playJumpScare();
+          this.jumpScareFlashMs = 180;
+          this.cameras.main.shake(220, 0.007);
+        } else {
+          return;  // stay coiled — do not move
+        }
+      }
+      // Awake: relentless hunter chase
+      if (!undetected && Math.random() < 0.85) {
+        tryMove(gc.x, gc.y);
+      } else {
+        randomStep();
+      }
+
+    } else if (snake.behavior === 'sentry') {
+      // 🔴 Sentry snake — guards its spawn post (placed near a key fruit); charges fast in radius 5
+      const distFromPost   = Math.hypot(head.x - snake.spawnCol, head.y - snake.spawnRow);
+      const distFromPlayer = Math.hypot(head.x - gc.x, head.y - gc.y);
+      if (!undetected && distFromPlayer <= 5) {
+        // Player in territory — charge!
+        tryMove(gc.x, gc.y);
+      } else if (distFromPost > 2) {
+        // Drifted from post — return
+        tryMove(snake.spawnCol, snake.spawnRow);
+      } else {
+        // Stay near post with minimal drift
+        if (Math.random() < 0.25) randomStep();
+      }
+
     } else {
       // 'chaser' (default): always chase Glory, random walk when hidden
-      if (effectivelyHidden) {
+      if (undetected) {
         randomStep();
       } else {
         tryMove(gc.x, gc.y);
@@ -1126,6 +1282,8 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.challengeTimerMs >= this.CHALLENGE_DURATION_MS) {
         if (this.challengeType === 'hide') {
           this.dismissHideChallenge(false);
+        } else if (this.challengeType === 'fruitpuzzle') {
+          this.dismissFruitPuzzle(false);
         } else {
           this.dismissChallenge(false);
         }
@@ -1161,9 +1319,12 @@ class VenomArenaScene extends Phaser.Scene {
       // Base speed capped at 1.2 px/frame; reversed for Mirror Maze
       const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
       const baseSpd = Math.min(this.glory.speed, 1.2);
+      // Stealth: light joystick touch (< 45% of KNOB_MAX=39) OR Shift key held
+      this.gloryStealthMode = this.shiftKeyDown || this.joystickDist < 39 * 0.45;
+      const stealthMult = this.gloryStealthMode ? 0.4 : 1.0;
       const spd = this.activePowerUp?.kind === 'speed'
         ? baseSpd * 1.8
-        : baseSpd;
+        : baseSpd * stealthMult;
 
       // X axis: try movement, block on wall
       const newX = this.glory.x + this.dragDir.dx * spd * rev;
@@ -1182,6 +1343,9 @@ class VenomArenaScene extends Phaser.Scene {
       if (!this.isWallOrClosedGate(curXCell, newYCell)) {
         this.glory.y = newYClamped;
       }
+    } else {
+      // Standing still — stealth only if Shift is held
+      this.gloryStealthMode = this.shiftKeyDown;
     }
 
     // Smooth facing — interpolate facingAngle toward drag/trail direction
@@ -1248,8 +1412,8 @@ class VenomArenaScene extends Phaser.Scene {
       this.hideSuccessTimerMs = Math.max(0, this.hideSuccessTimerMs - delta);
     }
 
-    // Level 1 start gate: open when Glory walks past col 4
-    if (gameLevel === 1 && !this.gateOpen) {
+    // Start gate: open when Glory walks past col 1 (original Mountain Path gate — skip for house layout)
+    if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout && !this.gateOpen) {
       const gc1 = this.gloryCell();
       if (gc1.x >= 1) {
         this.gateOpen = true;
@@ -1259,9 +1423,9 @@ class VenomArenaScene extends Phaser.Scene {
     if (this.gateOpenAnimMs < 800) this.gateOpenAnimMs += delta;
     if (this.exitGateOpenAnimMs >= 0 && this.exitGateOpenAnimMs < 800) this.exitGateOpenAnimMs += delta;
 
-    // Trigger hide challenge when entering a bush (Level 1 or any level with bushes)
+    // Trigger hide challenge when entering a bush (levels with bushes, but not house layout)
     if (this.hiddenInBush && !this.challengeActive && !this.bushChallengeAnswered
-        && this.bushCells.size > 0 && gameLevel === 1) {
+        && this.bushCells.size > 0 && gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) {
       this.triggerHideChallenge();
     }
 
@@ -1311,10 +1475,112 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
+    // Fruit puzzle trigger — house level: locked exit door at col 25 requires solving a puzzle
+    // Require at least 4 fruits collected before the puzzle is offered (fruit gate)
+    if (!this.challengeActive && LEVEL_CONFIGS[gameLevel - 1].houseLayout && !this.exitPuzzleSolved) {
+      if (this.fruitPuzzleCooldownMs > 0) {
+        this.fruitPuzzleCooldownMs = Math.max(0, this.fruitPuzzleCooldownMs - delta);
+      } else {
+        const gcFP = this.gloryCell();
+        if (Math.abs(gcFP.x - 25) + Math.abs(gcFP.y - 10) <= 1) {
+          if (this.applesCollected >= 4) {
+            this.triggerFruitPuzzle();
+          } else {
+            // Not enough fruits — show hint and add a short cooldown so it doesn't spam
+            this.overlayText.setText(`🍎 Collect ${4 - this.applesCollected} more fruit${4 - this.applesCollected !== 1 ? 's' : ''} first!`);
+            this.overlayText.setVisible(true);
+            this.time.delayedCall(1800, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+            this.fruitPuzzleCooldownMs = 2500;
+          }
+        }
+      }
+    }
+
+    // House key pickup — glowing key in SE room bypasses the puzzle entirely
+    if (this.houseKey && !this.houseKey.taken && !this.exitPuzzleSolved) {
+      const gcK = this.gloryCell();
+      if (gcK.x === this.houseKey.col && gcK.y === this.houseKey.row) {
+        this.houseKey.taken = true;
+        this.score += 25;
+        this.unlockExit();
+      }
+    }
+
+    // Escape rush timer — counts up after exit unlocks so visual effects can animate
+    if (this.escapeRushActive) {
+      this.escapeRushMs += delta;
+    }
+
+    // Snake berserk penalty countdown (triggered by wrong fruit-puzzle answer)
+    if (this.snakePenaltyMs > 0) {
+      const prevMs = this.snakePenaltyMs;
+      this.snakePenaltyMs = Math.max(0, this.snakePenaltyMs - delta);
+      if (this.snakePenaltyMs === 0 && prevMs > 0) {
+        // Restore snake speeds to normal apple-scaled levels
+        for (const sn of this.snakes) {
+          if (!sn.alive || sn.behavior === 'slow') continue;
+          const isHunter = sn.behavior === 'hunter';
+          const ramp = isHunter ? 0.18 : 0.08;
+          const maxFactor = isHunter ? 2.5 : 1.8;
+          const factor = Math.min(maxFactor, 1.0 + this.applesCollected * ramp);
+          sn.tickMs = Math.max(isHunter ? 100 : 150, Math.floor(sn.baseTick / factor));
+        }
+      }
+    }
+
     // Power-up timer
     if (this.activePowerUp && this.activePowerUp.kind !== 'trap') {
       this.activePowerUp.msRemaining -= delta;
       if (this.activePowerUp.msRemaining <= 0) this.activePowerUp = null;
+    }
+
+    // Berry invisibility countdown
+    if (this.berryInvisibleMs > 0) {
+      this.berryInvisibleMs = Math.max(0, this.berryInvisibleMs - delta);
+    }
+
+    // Smoke bomb countdown
+    if (this.smokeActiveMs > 0) {
+      this.smokeActiveMs = Math.max(0, this.smokeActiveMs - delta);
+    }
+
+    // Stick swing visual countdown
+    if (this.stickSwingMs > 0) {
+      this.stickSwingMs = Math.max(0, this.stickSwingMs - delta);
+    }
+
+    // Jump scare flash countdown
+    if (this.jumpScareFlashMs > 0) {
+      this.jumpScareFlashMs = Math.max(0, this.jumpScareFlashMs - delta);
+    }
+
+    // ── Audio ticks (house layout only) ───────────────────────────────────
+    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout) {
+      // Hiss: play when nearest active snake is within 5 cells, every 2.2 seconds
+      this.snakeHissTimerMs = Math.max(0, this.snakeHissTimerMs - delta);
+      if (this.snakeHissTimerMs === 0) {
+        const gcA = this.gloryCell();
+        let nearestDist = Infinity;
+        for (const sn of this.snakes) {
+          if (!sn.alive || (!sn.emerged && !sn.awake)) continue;
+          const dist = Math.hypot(sn.segments[0].x - gcA.x, sn.segments[0].y - gcA.y);
+          if (dist < nearestDist) nearestDist = dist;
+        }
+        if (nearestDist <= 5) {
+          const vol = 1 - (nearestDist / 5); // louder when closer
+          this.playHiss(vol);
+          this.snakeHissTimerMs = this.escapeRushActive ? 1200 : 2200;
+        } else {
+          this.snakeHissTimerMs = 800; // check again soon
+        }
+      }
+
+      // Footsteps: soft click while sneaking + moving
+      this.footstepTimerMs = Math.max(0, this.footstepTimerMs - delta);
+      if (this.footstepTimerMs === 0 && this.gloryStealthMode && this.joystickActive) {
+        this.playFootstep();
+        this.footstepTimerMs = 380;
+      }
     }
 
     // Snake stun countdown
@@ -1368,7 +1634,19 @@ class VenomArenaScene extends Phaser.Scene {
         this.score += 10;
         this.gloryTrailMax = Math.min(24, this.gloryTrailMax + 3);
 
-        // Level 1: track apple count + progressively speed up snakes
+        // Fruit-type effects
+        if (c.kind === 'apple') {
+          // 🍎 Apple → restore 1 life (up to configured max)
+          this.glory.lives = Math.min(config.lives, this.glory.lives + 1);
+        } else if (c.kind === 'banana') {
+          // 🍌 Banana → 3-second speed boost
+          this.activePowerUp = { kind: 'speed', msRemaining: 3000 };
+        } else if (c.kind === 'berry') {
+          // 🍓 Berry → 4-second invisibility (snakes lose track of Glory)
+          this.berryInvisibleMs = 4000;
+        }
+
+        // Level 1 (house): track fruit count + progressively speed up snakes
         if (gameLevel === 1) {
           this.applesCollected++;
           // First apple of a new cycle — clear hidden state (snakes are on the hunt again)
@@ -1430,8 +1708,10 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private checkCollision(): void {
-    // Snakes can't find Glory when she is successfully hidden
+    // Snakes can't find Glory when she is successfully hidden, smoke-shrouded, or berry-invisible
     if (this.hiddenInBush && this.hidingSuccess) return;
+    if (this.berryInvisibleMs > 0) return;
+    if (this.smokeActiveMs > 0) return;
     const gc = this.gloryCell();
     for (const snake of this.snakes) {
       if (!snake.alive || snake.stunnedMs > 0) continue;
@@ -1588,6 +1868,112 @@ class VenomArenaScene extends Phaser.Scene {
     }
   }
 
+  // ── Unlock exit + trigger escape rush ─────────────────────────────────────
+  private unlockExit(): void {
+    // Remove the exit blocker walls
+    this.walls.delete('25,9');
+    this.walls.delete('25,10');
+    this.walls.delete('25,11');
+    this.exitPuzzleSolved = true;
+    this.exitGateOpenAnimMs = 0;
+    this.playExitOpen();
+
+    // Escape rush: all snakes wake up and charge Glory at full speed
+    this.escapeRushActive = true;
+    this.escapeRushMs = 0;
+    this.glory.invincibleMs = Math.max(this.glory.invincibleMs, 2000); // 2-second head start
+
+    for (const sn of this.snakes) {
+      if (!sn.alive) continue;
+      sn.behavior = 'hunter';
+      sn.emerged = true;
+      sn.retreating = false;
+      sn.stunnedMs = 0;
+      sn.tickMs = 160;          // fast but not impossible
+      sn.tickAccumMs = 0;
+    }
+
+    // "RUN!" banner
+    this.overlayText.setText('✨ EXIT OPEN!\n🐍 Snakes are coming — RUN! 🏃‍♀️');
+    this.overlayText.setVisible(true);
+    this.time.delayedCall(2500, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+  }
+
+  private triggerFruitPuzzle(): void {
+    this.challengeActive = true;
+    this.challengeTimerMs = 0;
+    this.challengeType = 'fruitpuzzle';
+    this.snakeTickTimer?.remove();
+
+    const q = CHALLENGES[15 + Math.floor(Math.random() * 3)];
+    this.fruitPuzzleChallenge = q;
+
+    const overlay = document.getElementById('challenge-overlay');
+    const badge = overlay?.querySelector<HTMLElement>('.challenge-badge');
+    const hint = overlay?.querySelector<HTMLElement>('.challenge-hint');
+    const stakes = overlay?.querySelector<HTMLElement>('.challenge-stakes');
+    const qEl = document.getElementById('challenge-question');
+    const choicesEl = document.getElementById('challenge-choices');
+    const bar = document.getElementById('challenge-timer-bar');
+
+    if (badge) badge.textContent = '🔐 FRUIT CODE LOCK';
+    if (hint) hint.textContent = 'Solve the fruit puzzle to unlock the exit!';
+    if (stakes) stakes.textContent = '✅ Correct: Exit unlocks! ❌ Wrong / Timeout: Snakes go BERSERK for 5 seconds! 😱';
+    if (qEl) qEl.textContent = q.q;
+    if (bar) bar.style.width = '100%';
+
+    if (choicesEl) {
+      choicesEl.innerHTML = '';
+      q.choices.forEach((choice, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'challenge-choice-btn';
+        btn.textContent = choice;
+        btn.addEventListener('click', () => { this.answerFruitPuzzle(idx); });
+        choicesEl.appendChild(btn);
+      });
+    }
+
+    overlay?.classList.remove('hidden');
+  }
+
+  private answerFruitPuzzle(idx: number): void {
+    if (!this.challengeActive || !this.fruitPuzzleChallenge) return;
+    const correct = idx === this.fruitPuzzleChallenge.answer;
+    this.dismissFruitPuzzle(correct);
+  }
+
+  private dismissFruitPuzzle(correct: boolean): void {
+    if (correct) {
+      this.unlockExit();  // removes walls, triggers escape rush, starts animation
+    } else {
+      // BERSERK MODE: all snakes move at ~2× speed for 5 seconds
+      this.snakePenaltyMs = 5000;
+      for (const sn of this.snakes) {
+        if (!sn.alive) continue;
+        sn.tickMs = Math.max(80, Math.floor(sn.tickMs * 0.5));
+      }
+      this.glory.invincibleMs = Math.max(this.glory.invincibleMs, 800);
+      this.fruitPuzzleCooldownMs = 6000;  // re-trigger cooldown so player can flee
+    }
+
+    this.challengeActive = false;
+    this.fruitPuzzleChallenge = null;
+    this.challengeTimerMs = 0;
+    this.challengeType = null;
+
+    // Restore stakes text for any future IQ gate challenges
+    const stakes = document.querySelector<HTMLElement>('#challenge-overlay .challenge-stakes');
+    if (stakes) stakes.textContent = '✅ Correct: You\'re revived! \u00a0 ❌ Wrong / Timeout: Game Over 💀';
+
+    document.getElementById('challenge-overlay')?.classList.add('hidden');
+
+    if (!this.roundOver) {
+      const config = LEVEL_CONFIGS[gameLevel - 1];
+      const tickMs = Math.max(80, Math.floor(config.snakeTickMs / this.speedRampFactor));
+      this.startSnakeTimer(tickMs);
+    }
+  }
+
   private answerChallenge(idx: number): void {
     if (!this.challengeActive || !this.pendingIQGate) return;
     const correct = idx === this.pendingIQGate.challenge.answer;
@@ -1620,13 +2006,15 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   // ── Susie helper ───────────────────────────────────────────────────────────
-  private readonly POWER_UP_ROTATION: PowerUpKind[] = ['flashlight', 'trap', 'speed', 'hint'];
+  private POWER_UP_ROTATION: PowerUpKind[] = ['flashlight', 'trap', 'speed', 'hint'];
   private readonly POWER_UP_LABELS: Record<PowerUpKind, string> = {
     flashlight: '🔦 Flashlight',
     trap: '🪤 Trap',
     speed: '⚡ Speed Boost',
     hint: '💡 Hint',
     pistol: '🔫 Pistol',
+    stick: '🪵 Wood Stick',
+    smoke: '💨 Smoke Bomb',
   };
 
   private offerSusiePowerUp(): void {
@@ -1660,10 +2048,106 @@ class VenomArenaScene extends Phaser.Scene {
     if (kind === 'trap') {
       this.waitingForTrapPlacement = true;
       this.activePowerUp = null;
+    } else if (kind === 'stick') {
+      this.useWoodStick();
+    } else if (kind === 'smoke') {
+      this.smokeActiveMs = 5000;
     } else {
-      const durations: Record<PowerUpKind, number> = { flashlight: 8000, trap: 0, speed: 6000, hint: 4000, pistol: 0 };
+      const durations: Record<PowerUpKind, number> = { flashlight: 8000, trap: 0, speed: 6000, hint: 4000, pistol: 0, stick: 0, smoke: 0 };
       this.activePowerUp = { kind, msRemaining: durations[kind] };
     }
+  }
+
+  // ── Audio engine (Web Audio API — all sounds generated procedurally) ───────
+  private getAudioCtx(): AudioContext | null {
+    if (!this.audioCtx) {
+      try { this.audioCtx = new AudioContext(); } catch { return null; }
+    }
+    if (this.audioCtx.state === 'suspended') void this.audioCtx.resume();
+    return this.audioCtx;
+  }
+
+  /** Bandpass-filtered white noise — snake nearby hiss */
+  private playHiss(volume: number): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, Math.floor(sr * 0.3), sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    const src = ctx.createBufferSource();  src.buffer = buf;
+    const bp = ctx.createBiquadFilter();   bp.type = 'bandpass'; bp.frequency.value = 4000; bp.Q.value = 0.7;
+    const g = ctx.createGain();            g.gain.value = Math.min(1, volume) * 0.35;
+    src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+    src.start();
+  }
+
+  /** Soft low-frequency click — sneaking footstep */
+  private playFootstep(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, Math.floor(sr * 0.045), sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.5);
+    const src = ctx.createBufferSource();  src.buffer = buf;
+    const lp = ctx.createBiquadFilter();   lp.type = 'lowpass'; lp.frequency.value = 180;
+    const g = ctx.createGain();            g.gain.value = 0.12;
+    src.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    src.start();
+  }
+
+  /** Descending stab + brief thud — sleeper wakes / jump scare */
+  private playJumpScare(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(900, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.35);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc.connect(g); g.connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.4);
+  }
+
+  /** Ascending 3-note chime — exit unlock */
+  private playExitOpen(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    [440, 554, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const g   = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      const t0 = ctx.currentTime + i * 0.14;
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.28, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.35);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(t0); osc.stop(t0 + 0.35);
+    });
+  }
+
+  // ── Wood Stick ─────────────────────────────────────────────────────────────
+  private useWoodStick(): void {
+    // Find the nearest emerged, non-retreating snake within 8 cells
+    const gc = this.gloryCell();
+    let nearest: SnakeEnemy | null = null;
+    let minDist = Infinity;
+    for (const sn of this.snakes) {
+      if (!sn.alive || !sn.emerged || sn.retreating) continue;
+      const dist = Math.hypot(sn.segments[0].x - gc.x, sn.segments[0].y - gc.y);
+      if (dist < 8 && dist < minDist) { minDist = dist; nearest = sn; }
+    }
+
+    if (!nearest) return;  // no snake in range — tool wasted
+
+    nearest.stunnedMs = Math.max(nearest.stunnedMs, 4000);  // stun 4 seconds
+    nearest.retreating = true;                               // force it back to spawn
+    this.stickSwingMs = 500;                                 // brief visual flash
+    this.score += 5;
   }
 
   // ── Pistol ─────────────────────────────────────────────────────────────────
@@ -1695,7 +2179,7 @@ class VenomArenaScene extends Phaser.Scene {
     const btn = document.getElementById('pistol-btn');
     const cnt = document.getElementById('pistol-count');
     if (!btn || !cnt) return;
-    if (gameLevel === 1) {
+    if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) {
       btn.classList.remove('hidden');
       cnt.textContent = String(this.pistolBullets);
       btn.classList.toggle('empty', this.pistolBullets <= 0);
@@ -1717,6 +2201,15 @@ class VenomArenaScene extends Phaser.Scene {
 
     const scoreEl = document.getElementById('glory-score-display');
     if (scoreEl) scoreEl.textContent = `Score: ${this.score}`;
+
+    const stealthEl = document.getElementById('stealth-indicator');
+    if (stealthEl) stealthEl.classList.toggle('hidden', !this.gloryStealthMode);
+
+    const berserkEl = document.getElementById('berserk-indicator');
+    if (berserkEl) berserkEl.classList.toggle('hidden', this.snakePenaltyMs <= 0);
+
+    const escapeEl = document.getElementById('escape-rush-indicator');
+    if (escapeEl) escapeEl.classList.toggle('hidden', !this.escapeRushActive);
 
     const config = LEVEL_CONFIGS[gameLevel - 1];
     const goal = config.survivalGoal;
@@ -1740,13 +2233,50 @@ class VenomArenaScene extends Phaser.Scene {
     this.drawBackground();
     this.drawCollectibles();
     this.drawBushes();
-    if (gameLevel === 1) { this.drawSpawnBushes(); this.drawStartGate(); this.drawExitGate(); }
+    if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) { this.drawSpawnBushes(); this.drawStartGate(); this.drawExitGate(); }
     this.drawPistolPickups();
     this.drawExitZone();
     this.drawPoisonTiles();
     this.drawIQGates();
     this.drawSnakes();
     this.drawBullets();
+
+    // Locked exit door glow (house layout, puzzle not yet solved)
+    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout && !this.exitPuzzleSolved) {
+      const pulse = 0.25 + 0.2 * Math.sin(Date.now() / 350);
+      this.topGraphics.fillStyle(0xff8800, pulse);
+      this.topGraphics.fillRect(25 * CELL_SIZE, 9 * CELL_SIZE, CELL_SIZE, 3 * CELL_SIZE);
+      this.topGraphics.lineStyle(2, 0xffcc44, Math.min(1, pulse + 0.3));
+      this.topGraphics.strokeRect(25 * CELL_SIZE + 2, 9 * CELL_SIZE + 2, CELL_SIZE - 4, 3 * CELL_SIZE - 4);
+    }
+
+    // Hidden key drawing (house layout, key not yet taken)
+    if (this.houseKey && !this.houseKey.taken) {
+      this.drawHouseKey(this.houseKey.col, this.houseKey.row);
+    }
+
+    // Escape rush visuals — gold light rays from exit + red vignette
+    if (this.escapeRushActive) {
+      const exitX = 29 * CELL_SIZE;
+      const exitY = 10 * CELL_SIZE + CELL_SIZE / 2;
+      // Pulsing gold cone from exit toward center of map
+      const r = 0.5 + 0.4 * Math.sin(Date.now() / 180);
+      this.topGraphics.fillStyle(0xffdd44, r * 0.18);
+      this.topGraphics.fillTriangle(exitX, exitY - 28, exitX, exitY + 28, exitX - 180, exitY);
+      this.topGraphics.lineStyle(3, 0xffdd44, r * 0.7);
+      this.topGraphics.strokeRect(28 * CELL_SIZE, 9 * CELL_SIZE, CELL_SIZE, 3 * CELL_SIZE);
+      // Red danger vignette around screen edges
+      const vAlpha = 0.07 + 0.05 * Math.sin(Date.now() / 200);
+      this.overlayGraphics.fillStyle(0xff2200, vAlpha);
+      this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+
+    // Snake berserk warning — red screen pulse
+    if (this.snakePenaltyMs > 0) {
+      const bPulse = 0.08 + 0.07 * Math.sin(Date.now() / 120);
+      this.overlayGraphics.fillStyle(0xff0000, bPulse);
+      this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
 
     if (this.activePowerUp?.kind === 'flashlight') {
       this.overlayGraphics.fillStyle(0x000000, 0.86);
@@ -1757,6 +2287,11 @@ class VenomArenaScene extends Phaser.Scene {
 
     if (this.fogOfWar) {
       this.drawFogOfWar();
+    }
+
+    // House dim lighting — indoor vignette + jump scare flash
+    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout) {
+      this.drawHouseDim();
     }
 
     if (this.trap) {
@@ -1804,43 +2339,120 @@ class VenomArenaScene extends Phaser.Scene {
       const cx = c.col * CELL_SIZE + CELL_SIZE / 2;
       const cy = c.row * CELL_SIZE + CELL_SIZE / 2;
 
-      // Apple shadow
+      if (c.kind === 'banana') {
+        this.drawBanana(cx, cy);
+      } else if (c.kind === 'berry') {
+        this.drawBerry(cx, cy);
+      } else {
+        this.drawApple(cx, cy);
+      }
+    }
+  }
+
+  private drawApple(cx: number, cy: number): void {
+      // Shadow
       this.bgGraphics.fillStyle(0x000000, 0.2);
       this.bgGraphics.fillEllipse(cx + 1, cy + 7, 12, 5);
-
-      // Apple body — deep red gradient suggestion (two-tone)
+      // Apple body
       this.bgGraphics.fillStyle(0xcc1111);
       this.bgGraphics.fillCircle(cx, cy + 1, 7);
       this.bgGraphics.fillStyle(0xff3333, 0.5);
       this.bgGraphics.fillCircle(cx - 1, cy, 5);
-
-      // Apple indent at top
+      // Indent
       this.bgGraphics.fillStyle(0x990000, 0.8);
       this.bgGraphics.fillCircle(cx, cy - 5, 2.5);
-
       // Stem
       this.bgGraphics.fillStyle(0x5c3a1e);
       this.bgGraphics.fillRect(cx - 0.5, cy - 8, 1.5, 4);
-
       // Leaf
       this.bgGraphics.fillStyle(0x2d8c22);
       this.bgGraphics.fillEllipse(cx + 4, cy - 7, 9, 5);
-      // Leaf vein
       this.bgGraphics.lineStyle(0.8, 0x1a5c14, 0.7);
       this.bgGraphics.beginPath();
       this.bgGraphics.moveTo(cx + 1, cy - 7);
       this.bgGraphics.lineTo(cx + 7, cy - 7);
       this.bgGraphics.strokePath();
-
       // Shine
       this.bgGraphics.fillStyle(0xffffff, 0.55);
       this.bgGraphics.fillCircle(cx - 2, cy - 1, 2.5);
       this.bgGraphics.fillStyle(0xffffff, 0.25);
       this.bgGraphics.fillCircle(cx - 1, cy + 2, 1.5);
-    }
   }
 
-  // ── Pistol pickups and bullets ───────────────────────────────────────────
+  private drawBanana(cx: number, cy: number): void {
+      // Shadow
+      this.bgGraphics.fillStyle(0x000000, 0.2);
+      this.bgGraphics.fillEllipse(cx + 1, cy + 7, 14, 4);
+      // Banana body (curved yellow oval)
+      this.bgGraphics.fillStyle(0xf5c518);
+      this.bgGraphics.fillEllipse(cx, cy, 16, 8);
+      this.bgGraphics.fillStyle(0xffe44d);
+      this.bgGraphics.fillEllipse(cx - 1, cy - 1, 11, 5);
+      // Tips (brown ends)
+      this.bgGraphics.fillStyle(0x7a5c1e);
+      this.bgGraphics.fillCircle(cx - 7, cy + 2, 2);
+      this.bgGraphics.fillCircle(cx + 7, cy - 2, 2);
+      // Shine
+      this.bgGraphics.fillStyle(0xffffff, 0.4);
+      this.bgGraphics.fillEllipse(cx - 2, cy - 2, 5, 2.5);
+  }
+
+  private drawBerry(cx: number, cy: number): void {
+      // Shadow
+      this.bgGraphics.fillStyle(0x000000, 0.2);
+      this.bgGraphics.fillEllipse(cx + 1, cy + 7, 12, 4);
+      // Three berries cluster (purple/magenta)
+      const berryColor = 0xcc2288;
+      const berryHighlight = 0xff44aa;
+      this.bgGraphics.fillStyle(berryColor);
+      this.bgGraphics.fillCircle(cx - 3, cy + 2, 4.5);
+      this.bgGraphics.fillCircle(cx + 3, cy + 2, 4.5);
+      this.bgGraphics.fillCircle(cx, cy - 2, 4.5);
+      // Highlights
+      this.bgGraphics.fillStyle(berryHighlight, 0.5);
+      this.bgGraphics.fillCircle(cx - 4, cy + 1, 2);
+      this.bgGraphics.fillCircle(cx + 2, cy + 1, 2);
+      this.bgGraphics.fillCircle(cx - 1, cy - 3, 2);
+      // Stem
+      this.bgGraphics.fillStyle(0x2d8c22);
+      this.bgGraphics.fillRect(cx - 0.5, cy - 7, 1.5, 4);
+      // Shine spots
+      this.bgGraphics.fillStyle(0xffffff, 0.5);
+      this.bgGraphics.fillCircle(cx - 4, cy, 1.2);
+      this.bgGraphics.fillCircle(cx + 2, cy, 1.2);
+      this.bgGraphics.fillCircle(cx - 1, cy - 4, 1.2);
+  }
+
+  private drawHouseKey(col: number, row: number): void {
+    const cx = col * CELL_SIZE + CELL_SIZE / 2;
+    const cy = row * CELL_SIZE + CELL_SIZE / 2;
+    const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 400);
+
+    // Glow halo
+    this.topGraphics.fillStyle(0xffdd00, pulse * 0.25);
+    this.topGraphics.fillCircle(cx, cy, 13);
+    this.topGraphics.lineStyle(1.5, 0xffdd00, pulse * 0.6);
+    this.topGraphics.strokeCircle(cx, cy, 13);
+
+    const g = this.bgGraphics;
+    // Key ring (circle)
+    g.fillStyle(0xffcc00);
+    g.fillCircle(cx - 2, cy - 2, 5);
+    g.fillStyle(0x000000, 0.0);
+    g.fillCircle(cx - 2, cy - 2, 2.5); // punch-out hole
+    g.lineStyle(2, 0xffffff, 0.35);
+    g.strokeCircle(cx - 2, cy - 2, 5);
+
+    // Key shaft
+    g.fillStyle(0xffcc00);
+    g.fillRect(cx - 1, cy - 1, 9, 2.5);
+
+    // Key teeth
+    g.fillRect(cx + 4, cy + 1, 2, 3);
+    g.fillRect(cx + 7, cy + 1, 2, 2);
+  }
+
+
   private drawPistolPickups(): void {
     const g = this.bgGraphics;
     const pulse = 0.75 + 0.25 * Math.sin(this.exitPulseTimer / 380);
@@ -2233,8 +2845,8 @@ class VenomArenaScene extends Phaser.Scene {
       const cx = col * CELL_SIZE + CELL_SIZE / 2;
       const cy = row * CELL_SIZE + CELL_SIZE / 2;
 
-      if (gameLevel === 1) {
-        // Level 1: draw as a large hiding tree
+      if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) {
+        // Level 1 (Mountain Path): draw as a large hiding tree
         const pulse = 0.75 + 0.25 * Math.sin(this.exitPulseTimer / 420 + col * 1.3);
         const g = this.bgGraphics;
 
@@ -2357,6 +2969,82 @@ class VenomArenaScene extends Phaser.Scene {
     this.bgGraphics.fillRoundedRect(cx - 16, cy - 30, 32, 11, 4);
     this.bgGraphics.fillStyle(0xffdd00, 0.95);
     this.bgGraphics.fillRoundedRect(cx - 15, cy - 31, 30, 10, 3);
+  }
+
+  // ── House interior background ────────────────────────────────────────────
+  private drawHouseBackground(): void {
+    const g = this.bgGraphics;
+
+    // Wooden floor tiles — warm tan/brown checkerboard
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const x = col * CELL_SIZE;
+        const y = row * CELL_SIZE;
+        const even = (col + row) % 2 === 0;
+        g.fillStyle(even ? 0xc8a265 : 0xb8925a, 1.0);
+        g.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+      }
+    }
+
+    // Subtle wood grain lines on every tile
+    g.lineStyle(0.5, 0x9a7040, 0.25);
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const x = col * CELL_SIZE;
+        const y = row * CELL_SIZE;
+        // Horizontal grain stroke
+        g.beginPath();
+        g.moveTo(x + 2, y + CELL_SIZE * 0.35);
+        g.lineTo(x + CELL_SIZE - 2, y + CELL_SIZE * 0.35);
+        g.strokePath();
+        g.beginPath();
+        g.moveTo(x + 2, y + CELL_SIZE * 0.7);
+        g.lineTo(x + CELL_SIZE - 2, y + CELL_SIZE * 0.7);
+        g.strokePath();
+      }
+    }
+
+    // Tile border grid lines
+    g.lineStyle(0.8, 0x7a5530, 0.35);
+    for (let row = 0; row <= ROWS; row++) {
+      g.beginPath();
+      g.moveTo(0, row * CELL_SIZE);
+      g.lineTo(CANVAS_W, row * CELL_SIZE);
+      g.strokePath();
+    }
+    for (let col = 0; col <= COLS; col++) {
+      g.beginPath();
+      g.moveTo(col * CELL_SIZE, 0);
+      g.lineTo(col * CELL_SIZE, CANVAS_H);
+      g.strokePath();
+    }
+
+    // Walls drawn as dark brick/stone over the floor
+    for (const key of this.walls) {
+      const [col, row] = key.split(',').map(Number);
+      const x = col * CELL_SIZE;
+      const y = row * CELL_SIZE;
+
+      // Stone wall base
+      g.fillStyle(0x4a3a28);
+      g.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+
+      // Brick pattern — alternating offsets
+      const brickOffset = row % 2 === 0 ? 0 : CELL_SIZE / 2;
+      g.fillStyle(0x5c4830, 0.9);
+      g.fillRect(x + brickOffset % CELL_SIZE, y + 2, CELL_SIZE / 2 - 1, CELL_SIZE / 2 - 2);
+      g.fillRect(x + (brickOffset + CELL_SIZE / 2) % CELL_SIZE, y + CELL_SIZE / 2 + 1, CELL_SIZE / 2 - 1, CELL_SIZE / 2 - 2);
+
+      // Mortar lines
+      g.lineStyle(1, 0x2e2018, 0.8);
+      g.beginPath(); g.moveTo(x, y + CELL_SIZE / 2); g.lineTo(x + CELL_SIZE, y + CELL_SIZE / 2); g.strokePath();
+      g.lineStyle(1, 0x2e2018, 0.5);
+      g.beginPath(); g.moveTo(x + CELL_SIZE / 2, y); g.lineTo(x + CELL_SIZE / 2, y + CELL_SIZE / 2); g.strokePath();
+
+      // Top-edge highlight (gives depth)
+      g.fillStyle(0x7a6045, 0.3);
+      g.fillRect(x, y, CELL_SIZE, 2);
+    }
   }
 
   // ── Level 1: Clean Mountain Path background ──────────────────────────────
@@ -2587,8 +3275,10 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    // Level 1 uses its own clean visual design
-    if (gameLevel === 1) { this.drawLevel1Background(); return; }
+    // House layout uses its own interior background
+    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout) { this.drawHouseBackground(); return; }
+    // Level 1 (Mountain Path) uses its own clean visual design — skip if replaced
+    if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) { this.drawLevel1Background(); return; }
 
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);
@@ -2875,6 +3565,29 @@ class VenomArenaScene extends Phaser.Scene {
     }
   }
 
+  /** Gentle indoor dim — darker at room edges, lighter near Glory; more intense during escape rush */
+  private drawHouseDim(): void {
+    const gc = this.gloryCell();
+    const lightRadius = this.escapeRushActive ? 4 : 6.5;
+    const maxAlpha    = this.escapeRushActive ? 0.68 : 0.50;
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const dist = Math.hypot(col - gc.x, row - gc.y);
+        if (dist > lightRadius) {
+          const alpha = Math.min(maxAlpha, (dist - lightRadius) * 0.10);
+          this.overlayGraphics.fillStyle(0x000008, alpha);
+          this.overlayGraphics.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+      }
+    }
+    // Jump scare white flash
+    if (this.jumpScareFlashMs > 0) {
+      const flashAlpha = (this.jumpScareFlashMs / 180) * 0.75;
+      this.overlayGraphics.fillStyle(0xffffff, flashAlpha);
+      this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+  }
+
   private drawFogOfWar(): void {
     const gc = this.gloryCell();
     const FOG_RADIUS = 4;
@@ -2896,6 +3609,12 @@ class VenomArenaScene extends Phaser.Scene {
       if (!snake.alive) continue;
       // Don't draw snakes that are fully hidden in their spawn bush
       if (!snake.emerged && !snake.retreating) continue;
+
+      // 🟢 Sleeping snake — draw as a coiled spiral instead of the normal body
+      if (snake.behavior === 'sleeper' && !snake.awake) {
+        this.drawSleepingSnake(snake);
+        continue;
+      }
 
       const stunned = snake.stunnedMs > 0;
       const alpha   = (stunned ? 0.4 : 1.0) * (snake.retreating ? 0.65 : 1.0);
@@ -3054,6 +3773,35 @@ class VenomArenaScene extends Phaser.Scene {
     return (r << 16) | (g << 8) | b;
   }
 
+  private drawSleepingSnake(snake: SnakeEnemy): void {
+    const g = this.bgGraphics;
+    const t = this.time.now;
+    const sx = snake.spawnCol * CELL_SIZE + CELL_SIZE / 2;
+    const sy = snake.spawnRow * CELL_SIZE + CELL_SIZE / 2;
+    const breathe = 0.92 + 0.08 * Math.sin(t / 900);  // slow breathing pulse
+
+    // Outer coil ring
+    g.lineStyle(4, snake.color, 0.85 * breathe);
+    g.strokeCircle(sx, sy, 7 * breathe);
+    // Inner coil ring
+    g.lineStyle(3, snake.color, 0.65 * breathe);
+    g.strokeCircle(sx, sy, 4 * breathe);
+    // Center dot (head)
+    g.fillStyle(snake.color, 0.9);
+    g.fillCircle(sx, sy, 2.5);
+    // Closed-eye slits
+    g.lineStyle(1.5, 0x000000, 0.8);
+    g.beginPath(); g.moveTo(sx - 4, sy - 1); g.lineTo(sx - 2, sy - 1); g.strokePath();
+    g.beginPath(); g.moveTo(sx + 2, sy - 1); g.lineTo(sx + 4, sy - 1); g.strokePath();
+    // Floating "z" dots (sleep indicator)
+    const zPhase = (t % 1800) / 1800;
+    const za = Math.max(0, Math.sin(zPhase * Math.PI));
+    g.fillStyle(0xffffff, za * 0.7);
+    g.fillCircle(sx + 8 + zPhase * 4, sy - 8 - zPhase * 5, 2);
+    g.fillStyle(0xffffff, za * 0.4);
+    g.fillCircle(sx + 11 + zPhase * 3, sy - 13 - zPhase * 4, 1.5);
+  }
+
   private drawGloryFallen(x: number, y: number, fallMs: number): void {
     const g = this.topGraphics;
     const totalMs = 1200;
@@ -3170,8 +3918,8 @@ class VenomArenaScene extends Phaser.Scene {
       if (!flashOn) return;
     }
 
-    // When successfully hidden inside a shelter, draw semi-transparent
-    const alpha = (this.hiddenInBush && this.hidingSuccess) ? 0.30 : 1.0;
+    // When successfully hidden inside a shelter or berry-invisible, draw semi-transparent
+    const alpha = (this.hiddenInBush && this.hidingSuccess) || this.berryInvisibleMs > 0 || this.smokeActiveMs > 0 ? 0.30 : 1.0;
 
     // Facing direction vectors from smoothly-interpolated angle
     const fwdX = Math.cos(this.facingAngle);
@@ -3284,6 +4032,39 @@ class VenomArenaScene extends Phaser.Scene {
       this.topGraphics.lineStyle(3, 0xffff44, 0.7);
       this.topGraphics.strokeCircle(x, y, 24);
     }
+    // Berry invisibility shimmer ring
+    if (this.berryInvisibleMs > 0) {
+      const pulse = 0.3 + 0.3 * Math.sin(Date.now() / 150);
+      this.topGraphics.lineStyle(3, 0xff44cc, pulse);
+      this.topGraphics.strokeCircle(x, y, 22);
+    }
+    // Smoke bomb — expanding grey cloud rings
+    if (this.smokeActiveMs > 0) {
+      const t = Date.now() / 1000;
+      for (let i = 0; i < 3; i++) {
+        const phase = (t * 1.2 + i * 0.4) % 1;
+        const radius = 14 + phase * 22;
+        const opacity = (1 - phase) * 0.55;
+        this.topGraphics.lineStyle(4, 0xaaccaa, opacity);
+        this.topGraphics.strokeCircle(x, y, radius);
+      }
+      // Grey fill to show concealment
+      const fogAlpha = 0.18 + 0.06 * Math.sin(Date.now() / 200);
+      this.topGraphics.fillStyle(0x88aa88, fogAlpha);
+      this.topGraphics.fillCircle(x, y, 28);
+    }
+    // Stick swing flash — yellow arc burst toward nearest snake
+    if (this.stickSwingMs > 0) {
+      const frac = this.stickSwingMs / 500;
+      this.topGraphics.lineStyle(3, 0xffcc44, frac * 0.9);
+      this.topGraphics.strokeCircle(x, y, (1 - frac) * 30 + 12);
+    }
+    // Stealth aura — soft green halo visible only to player (not snakes!)
+    if (this.gloryStealthMode && this.berryInvisibleMs <= 0) {
+      const pulse = 0.12 + 0.08 * Math.sin(Date.now() / 220);
+      this.topGraphics.lineStyle(2, 0x44ff88, pulse);
+      this.topGraphics.strokeCircle(x, y, 19);
+    }
   }
 
   private drawHintArrow(): void {
@@ -3383,6 +4164,16 @@ class VenomArenaScene extends Phaser.Scene {
     this.domListeners = [];
     document.getElementById('susie-bubble')?.classList.add('hidden');
     document.getElementById('challenge-overlay')?.classList.add('hidden');
+    document.getElementById('stealth-indicator')?.classList.add('hidden');
+    document.getElementById('berserk-indicator')?.classList.add('hidden');
+    document.getElementById('escape-rush-indicator')?.classList.add('hidden');
+    this.smokeActiveMs = 0;
+    this.stickSwingMs = 0;
+    this.escapeRushActive = false;
+    this.escapeRushMs = 0;
+    this.jumpScareFlashMs = 0;
+    void this.audioCtx?.close();
+    this.audioCtx = null;
   }
 }
 
