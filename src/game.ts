@@ -184,20 +184,61 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       { behavior: 'sentry', tickMs: 240, startCol: 24, startRow: 4,  color: 0xFF5AAE },
     ],
   },
-  // Level 2: Narrow Trail — thinner path, more curves, no enemies
+  // Level 2: Narrow Trail Escape — S-curve mountain trail; hunters chasing from behind!
+  // Layout: upper-left corridor → connector 1 (down) → middle corridor → connector 2 (up) → upper-right corridor → exit
   {
-    name: 'Narrow Trail',
-    survivalGoal: 999, snakeCount: 0, snakeTickMs: 500, glorySpeed: 1.8, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    name: 'Narrow Trail Escape',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 400, glorySpeed: 2.0, lives: 3,
+    scoreMultiplier: 1.2, fogOfWar: false, speedRamp: true,
+    bannerText: '🌄 NARROW TRAIL\nThey followed you — RUN! 🏃‍♀️',
     walls: [
-      ...hwall(9,  2, 14), ...hwall(9, 16, 29),
-      ...hwall(15, 2, 14), ...hwall(15, 16, 29),
-      ...vwall(14, 9, 15), ...vwall(16, 9, 15),
+      // ── Upper-left trail: rows 5–6, cols 1–15 ───────────────────────────
+      ...hwall(4,  1, 15),   // top wall
+      ...hwall(7,  1, 11),   // bottom wall (gap at cols 12–15 for connector 1)
+      // ── Connector 1: cols 12–15, rows 7–14 (going DOWN) ─────────────────
+      ...vwall(11, 7, 14),   // left wall
+      ...vwall(16, 4, 14),   // right wall (continuous from top of upper-left trail)
+      // ── Middle trail: rows 15–16, cols 12–21 ─────────────────────────────
+      ...hwall(14, 16, 21),  // top wall (cols 12–15 left open = connector 1 entry)
+      ...hwall(17, 12, 22),  // bottom wall (col 22 closed; connector 2 entry at cols 20–22 above)
+      // ── Connector 2: cols 20–22, rows 6–16 (going UP) ───────────────────
+      ...vwall(19,  6, 16),  // left wall
+      ...vwall(23,  5, 17),  // right wall
+      // ── Upper-right trail: rows 5–6, cols 22–30 ─────────────────────────
+      ...hwall(4, 20, 30),   // top wall (also seals top of connector 2 entry)
+      ...hwall(7, 22, 30),   // bottom wall
     ],
-    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 2, row: 12 },
-    exitZone:   { col: 30, row: 12 },
-    collectibles: [[5,12],[7,11],[10,12],[13,11],[17,12],[19,11],[22,12],[25,11],[27,12]] as [number,number][],
-    bushes: [[4,13],[9,11],[15,13],[21,11],[27,13]],
+    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false,
+    gloryStart: { col: 1,  row: 5 },
+    exitZone:   { col: 30, row: 5 },
+    collectibles: [
+      // Upper-left trail — lures player forward fast
+      [3, 5], [6, 6], [9, 5],
+      // Connector 1 — risky mid-bend prizes
+      [13, 9], [13, 13],
+      // Middle trail — rewards for surviving the choke
+      [15, 15], [18, 16],
+      // Connector 2 + upper-right trail — final sprint prizes
+      [21, 10], [25, 5], [28, 6],
+    ] as [number, number][],
+    bushes: [
+      [4,  6],  // upper-left trail (early cover)
+      [8,  5],  // upper-left trail (mid cover)
+      [14, 14], // connector 1 / middle-trail junction
+      [20, 15], // middle trail (only hope near choke)
+      [24, 5],  // upper-right trail (pre-exit cover)
+    ],
+    snakeEnemyConfigs: [
+      // 🔴 Fast Hunter — the house sentry, right on Glory's tail
+      { behavior: 'hunter' as const, tickMs: 380, startCol: 5, startRow: 5, color: 0xff2244 },
+      // 🟢 Hunter — second house snake, staggered one row back
+      { behavior: 'hunter' as const, tickMs: 430, startCol: 4, startRow: 6, color: 0x7CFF4F },
+      // 🟡 Patrol — guards the middle choke; back-and-forth sweep
+      { behavior: 'patrol' as const, tickMs: 460, startCol: 16, startRow: 15, color: 0xffcc00,
+        patrolA: { col: 13, row: 15 }, patrolB: { col: 20, row: 15 } },
+      // 🟠 Sentry — lurks near the exit; charges when Glory enters the final stretch
+      { behavior: 'sentry' as const, tickMs: 340, startCol: 26, startRow: 5, color: 0xff8800 },
+    ],
   },
   // Level 3: Bamboo Bridge — very narrow 2-row bridge
   {
