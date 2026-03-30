@@ -1298,6 +1298,14 @@ kbd {
   font-weight: 600;
 }
 
+#fruit-boost-display {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #ffdd44;
+  letter-spacing: 0.04em;
+  min-height: 1.2em;
+}
+
 /* Susie bubble */
 .susie-bubble {
   display: flex;
