@@ -48,6 +48,7 @@ interface IQGateConfig { col: number; row: number; challengeIdx: number; }
 interface MovingWallConfig { col: number; row: number; col2: number; row2: number; intervalMs: number; }
 
 type SnakeBehavior = 'chaser' | 'random' | 'guard' | 'slow' | 'patrol' | 'hunter';
+type FruitType = 'apple' | 'banana' | 'berry';
 interface SnakeEnemyConfig {
   behavior: SnakeBehavior;
   tickMs: number;     // ms per move step
@@ -76,7 +77,7 @@ interface LevelConfig {
   speedRamp: boolean;
   // Optional: exit-based win instead of survival timer
   exitZone?: { col: number; row: number };
-  collectibles?: [number, number][];
+  collectibles?: [number, number, FruitType?][];
   gloryStart?: { col: number; row: number };
   bushes?: [number, number][];
   bannerText?: string;      // shown as popup text when level starts (e.g. Level 3)
@@ -110,13 +111,13 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     gloryStart: { col: 0, row: 6 },   // outside the fence (col 0), just left of the entrance
     exitZone:   { col: 31, row: 20 }, // past the exit gate (exit is at col 30)
     collectibles: [
-      // Upper corridor (rows 5–8, cols 1–19) — 6 apples
-      [3,6], [6,7], [9,6], [12,7], [15,6], [17,7],
-      // Connector (cols 17–19, rows 9–17) — 2 apples
-      [18,11], [18,15],
-      // Lower corridor (rows 19–21, cols 17–31) — 5 apples
-      [21,20], [23,19], [25,20], [27,19], [29,20],
-    ] as [number,number][],
+      // Upper corridor (rows 5–8, cols 1–19) — 4 apples + 2 bananas
+      [3,6], [6,7,'banana'], [9,6], [12,7], [15,6,'banana'], [17,7],
+      // Connector (cols 17–19, rows 9–17) — 1 apple + 1 berry
+      [18,11], [18,15,'berry'],
+      // Lower corridor (rows 19–21, cols 17–31) — 3 apples + 2 berries
+      [21,20], [23,19,'berry'], [25,20], [27,19], [29,20],
+    ] as [number,number,FruitType?][],
     bushes: [[7, 6], [18, 14], [22, 20]],  // 3 hiding shelters along path
     snakeEnemyConfigs: [
       // 🟢 Slow Snakes (2) — plodding chasers, easy to outrun. Bright lime green.
@@ -296,12 +297,17 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     gloryStart: { col: 2, row: 12 },
     exitZone:   { col: 29, row: 12 },
     collectibles: [
-      [4,3],[7,3],[10,3],[13,3],[16,3],[19,3],[22,3],[25,3],[28,3],
-      [4,7],[7,7],[10,7],[13,7],[16,7],[19,7],[22,7],[25,7],[28,7],
-      [4,12],[7,12],[13,12],[19,12],[25,12],[28,12],
-      [4,17],[7,17],[10,17],[13,17],[16,17],[19,17],[22,17],[25,17],[28,17],
-      [4,21],[7,21],[10,21],[13,21],[16,21],[19,21],[22,21],
-    ] as [number,number][],
+      // Row 3: bananas on left, apples in middle, berries on right
+      [4,3,'banana'],[7,3],[10,3],[13,3,'berry'],[16,3],[19,3,'banana'],[22,3],[25,3,'berry'],[28,3],
+      // Row 7: mixed
+      [4,7],[7,7,'banana'],[10,7],[13,7],[16,7,'berry'],[19,7],[22,7,'banana'],[25,7],[28,7],
+      // Middle row: bananas at start/end, apples in middle
+      [4,12,'banana'],[7,12],[13,12],[19,12],[25,12],[28,12,'banana'],
+      // Row 17: mixed
+      [4,17],[7,17,'berry'],[10,17],[13,17],[16,17],[19,17,'banana'],[22,17],[25,17],[28,17,'berry'],
+      // Row 21: berries at sides, apples in middle
+      [4,21,'berry'],[7,21],[10,21],[13,21,'banana'],[16,21],[19,21],[22,21,'berry'],
+    ] as [number,number,FruitType?][],
     bushes: [[6,5],[14,9],[22,5],[8,15],[18,19],[26,11]],
   },
   // Level 12: Practice Field — open canvas, no walls, free roam
@@ -569,7 +575,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   // Exit-zone + collectible system
   private exitZone: { col: number; row: number } | null = null;
-  private collectibles: Array<{ col: number; row: number; collected: boolean }> = [];
+  private collectibles: Array<{ col: number; row: number; collected: boolean; type: FruitType }> = [];
   private bushCells: Set<string> = new Set();
   private hiddenInBush = false;
   private hidingSuccess = false;          // true only after correctly answering the hide challenge
@@ -588,6 +594,10 @@ class VenomArenaScene extends Phaser.Scene {
   private applesCollected = 0;          // how many apples Glory has eaten in Level 1
   private exitGateOpenAnimMs = -1;      // -1 = closed; ≥0 = opening animation timer
   private hideAttemptCount = 0;     // wrong-answer streak on current hide riddle (resets at 3)
+
+  // Fruit effect timers
+  private bananaBoostMs = 0;    // 🍌 banana speed boost (ms remaining)
+  private berryInvisMs  = 0;    // 🍓 berry invisibility (ms remaining)
 
   // Pistol power-up
   private pistolPickups: Array<{ col: number; row: number; taken: boolean }> = [];
@@ -708,7 +718,7 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Exit zone + collectibles
     this.exitZone = config.exitZone ?? null;
-    this.collectibles = (config.collectibles ?? []).map(([col, row]) => ({ col, row, collected: false }));
+    this.collectibles = (config.collectibles ?? []).map(([col, row, type]) => ({ col, row, collected: false, type: type ?? 'apple' }));
     this.bushCells = new Set((config.bushes ?? []).map(([c, r]) => `${c},${r}`));
     this.hiddenInBush = false;
     this.hidingSuccess = false;
@@ -722,6 +732,8 @@ class VenomArenaScene extends Phaser.Scene {
     this.exitGateOpenAnimMs = -1;
     this.hideAttemptCount = 0;
     this.exitPulseTimer = 0;
+    this.bananaBoostMs = 0;
+    this.berryInvisMs  = 0;
 
     // Pistol pickups — 2 guns hidden on the Level 1 path
     this.pistolPickups = gameLevel === 1
@@ -991,7 +1003,7 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Snakes lose the player's exact location while she's hidden — unless the
     // hiding timer has expired (they start searching her last known position).
-    const effectivelyHidden = this.hiddenInBush && this.hidingSuccess;
+    const effectivelyHidden = (this.hiddenInBush && this.hidingSuccess) || this.berryInvisMs > 0;
 
     const tryMove = (cx: number, cy: number): void => {
       // Try primary axis first, then secondary
@@ -1161,7 +1173,7 @@ class VenomArenaScene extends Phaser.Scene {
       // Base speed capped at 1.2 px/frame; reversed for Mirror Maze
       const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
       const baseSpd = Math.min(this.glory.speed, 1.2);
-      const spd = this.activePowerUp?.kind === 'speed'
+      const spd = (this.activePowerUp?.kind === 'speed' || this.bananaBoostMs > 0)
         ? baseSpd * 1.8
         : baseSpd;
 
@@ -1317,6 +1329,10 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.activePowerUp.msRemaining <= 0) this.activePowerUp = null;
     }
 
+    // Fruit boost timers
+    if (this.bananaBoostMs > 0) this.bananaBoostMs = Math.max(0, this.bananaBoostMs - delta);
+    if (this.berryInvisMs  > 0) this.berryInvisMs  = Math.max(0, this.berryInvisMs  - delta);
+
     // Snake stun countdown
     for (const snake of this.snakes) {
       if (snake.stunnedMs > 0) {
@@ -1368,8 +1384,21 @@ class VenomArenaScene extends Phaser.Scene {
         this.score += 10;
         this.gloryTrailMax = Math.min(24, this.gloryTrailMax + 3);
 
+        // Fruit-specific effects
+        if (c.type === 'banana') {
+          // 🍌 Banana: 3-second speed boost (stacks/refreshes)
+          this.bananaBoostMs = Math.max(this.bananaBoostMs, 3000);
+        } else if (c.type === 'berry') {
+          // 🍓 Berry: 4-second invisibility — snakes can't target Glory
+          this.berryInvisMs = Math.max(this.berryInvisMs, 4000);
+        } else {
+          // 🍎 Apple: restore 1 life (up to starting max)
+          const maxLives = LEVEL_CONFIGS[gameLevel - 1].lives;
+          this.glory.lives = Math.min(maxLives, this.glory.lives + 1);
+        }
+
         // Level 1: track apple count + progressively speed up snakes
-        if (gameLevel === 1) {
+        if (gameLevel === 1 && c.type === 'apple') {
           this.applesCollected++;
           // First apple of a new cycle — clear hidden state (snakes are on the hunt again)
           if (this.applesCollected === 1) {
@@ -1430,8 +1459,8 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private checkCollision(): void {
-    // Snakes can't find Glory when she is successfully hidden
-    if (this.hiddenInBush && this.hidingSuccess) return;
+    // Snakes can't find Glory when she is successfully hidden or berry-invisible
+    if ((this.hiddenInBush && this.hidingSuccess) || this.berryInvisMs > 0) return;
     const gc = this.gloryCell();
     for (const snake of this.snakes) {
       if (!snake.alive || snake.stunnedMs > 0) continue;
@@ -1718,6 +1747,15 @@ class VenomArenaScene extends Phaser.Scene {
     const scoreEl = document.getElementById('glory-score-display');
     if (scoreEl) scoreEl.textContent = `Score: ${this.score}`;
 
+    // Fruit boost HUD
+    const boostEl = document.getElementById('fruit-boost-display');
+    if (boostEl) {
+      const parts: string[] = [];
+      if (this.bananaBoostMs > 0) parts.push(`🍌${Math.ceil(this.bananaBoostMs / 1000)}s`);
+      if (this.berryInvisMs  > 0) parts.push(`🍓${Math.ceil(this.berryInvisMs  / 1000)}s`);
+      boostEl.textContent = parts.join(' ');
+    }
+
     const config = LEVEL_CONFIGS[gameLevel - 1];
     const goal = config.survivalGoal;
     const progressBar = document.getElementById('survival-progress-bar');
@@ -1804,40 +1842,98 @@ class VenomArenaScene extends Phaser.Scene {
       const cx = c.col * CELL_SIZE + CELL_SIZE / 2;
       const cy = c.row * CELL_SIZE + CELL_SIZE / 2;
 
-      // Apple shadow
-      this.bgGraphics.fillStyle(0x000000, 0.2);
-      this.bgGraphics.fillEllipse(cx + 1, cy + 7, 12, 5);
-
-      // Apple body — deep red gradient suggestion (two-tone)
-      this.bgGraphics.fillStyle(0xcc1111);
-      this.bgGraphics.fillCircle(cx, cy + 1, 7);
-      this.bgGraphics.fillStyle(0xff3333, 0.5);
-      this.bgGraphics.fillCircle(cx - 1, cy, 5);
-
-      // Apple indent at top
-      this.bgGraphics.fillStyle(0x990000, 0.8);
-      this.bgGraphics.fillCircle(cx, cy - 5, 2.5);
-
-      // Stem
-      this.bgGraphics.fillStyle(0x5c3a1e);
-      this.bgGraphics.fillRect(cx - 0.5, cy - 8, 1.5, 4);
-
-      // Leaf
-      this.bgGraphics.fillStyle(0x2d8c22);
-      this.bgGraphics.fillEllipse(cx + 4, cy - 7, 9, 5);
-      // Leaf vein
-      this.bgGraphics.lineStyle(0.8, 0x1a5c14, 0.7);
-      this.bgGraphics.beginPath();
-      this.bgGraphics.moveTo(cx + 1, cy - 7);
-      this.bgGraphics.lineTo(cx + 7, cy - 7);
-      this.bgGraphics.strokePath();
-
-      // Shine
-      this.bgGraphics.fillStyle(0xffffff, 0.55);
-      this.bgGraphics.fillCircle(cx - 2, cy - 1, 2.5);
-      this.bgGraphics.fillStyle(0xffffff, 0.25);
-      this.bgGraphics.fillCircle(cx - 1, cy + 2, 1.5);
+      if (c.type === 'banana') {
+        this.drawBanana(cx, cy);
+      } else if (c.type === 'berry') {
+        this.drawBerry(cx, cy);
+      } else {
+        this.drawApple(cx, cy);
+      }
     }
+  }
+
+  private drawApple(cx: number, cy: number): void {
+    const g = this.bgGraphics;
+    // Shadow
+    g.fillStyle(0x000000, 0.2);
+    g.fillEllipse(cx + 1, cy + 7, 12, 5);
+    // Body — deep red
+    g.fillStyle(0xcc1111);
+    g.fillCircle(cx, cy + 1, 7);
+    g.fillStyle(0xff3333, 0.5);
+    g.fillCircle(cx - 1, cy, 5);
+    // Indent
+    g.fillStyle(0x990000, 0.8);
+    g.fillCircle(cx, cy - 5, 2.5);
+    // Stem
+    g.fillStyle(0x5c3a1e);
+    g.fillRect(cx - 0.5, cy - 8, 1.5, 4);
+    // Leaf
+    g.fillStyle(0x2d8c22);
+    g.fillEllipse(cx + 4, cy - 7, 9, 5);
+    g.lineStyle(0.8, 0x1a5c14, 0.7);
+    g.beginPath();
+    g.moveTo(cx + 1, cy - 7);
+    g.lineTo(cx + 7, cy - 7);
+    g.strokePath();
+    // Shine
+    g.fillStyle(0xffffff, 0.55);
+    g.fillCircle(cx - 2, cy - 1, 2.5);
+    g.fillStyle(0xffffff, 0.25);
+    g.fillCircle(cx - 1, cy + 2, 1.5);
+  }
+
+  private drawBanana(cx: number, cy: number): void {
+    const g = this.bgGraphics;
+    // Shadow
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(cx + 1, cy + 7, 14, 5);
+    // Banana body — bright yellow crescent shape
+    g.fillStyle(0xffdd00);
+    g.fillEllipse(cx, cy, 16, 9);
+    g.fillStyle(0xffee44, 0.7);
+    g.fillEllipse(cx - 1, cy - 1, 11, 5);
+    // Darker tips (brown ends)
+    g.fillStyle(0x996600, 0.85);
+    g.fillCircle(cx - 7, cy + 1, 2.5);
+    g.fillCircle(cx + 7, cy + 1, 2.5);
+    // Shine
+    g.fillStyle(0xffffff, 0.45);
+    g.fillEllipse(cx - 2, cy - 2, 6, 3);
+    // Speed icon — small lightning bolt
+    g.fillStyle(0xff8800, 0.95);
+    g.fillTriangle(cx + 1, cy - 9, cx - 2, cy - 5, cx + 1, cy - 5);
+    g.fillTriangle(cx - 1, cy - 5, cx + 2, cy - 5, cx - 1, cy - 1);
+  }
+
+  private drawBerry(cx: number, cy: number): void {
+    const g = this.bgGraphics;
+    // Shadow
+    g.fillStyle(0x000000, 0.18);
+    g.fillEllipse(cx + 1, cy + 7, 14, 5);
+    // Berry cluster — 3 round berries
+    const berryData = [
+      { ox: -4, oy: 2 },
+      { ox:  4, oy: 2 },
+      { ox:  0, oy: -3 },
+    ];
+    for (const b of berryData) {
+      g.fillStyle(0xcc1166);
+      g.fillCircle(cx + b.ox, cy + b.oy, 5);
+      g.fillStyle(0xff3399, 0.55);
+      g.fillCircle(cx + b.ox - 1, cy + b.oy - 1, 3);
+      g.fillStyle(0xffffff, 0.45);
+      g.fillCircle(cx + b.ox - 1.5, cy + b.oy - 1.5, 1.5);
+    }
+    // Stem + leaf
+    g.fillStyle(0x2d8c22);
+    g.fillRect(cx - 0.5, cy - 9, 1.5, 4);
+    g.fillEllipse(cx + 3, cy - 8, 7, 4);
+    // Invisibility sparkle — small star
+    g.fillStyle(0xcc66ff, 0.92);
+    g.fillCircle(cx + 7, cy - 9, 2.5);
+    g.fillStyle(0xffffff, 0.8);
+    g.fillCircle(cx + 7, cy - 9, 1.2);
   }
 
   // ── Pistol pickups and bullets ───────────────────────────────────────────
@@ -3170,8 +3266,8 @@ class VenomArenaScene extends Phaser.Scene {
       if (!flashOn) return;
     }
 
-    // When successfully hidden inside a shelter, draw semi-transparent
-    const alpha = (this.hiddenInBush && this.hidingSuccess) ? 0.30 : 1.0;
+    // When hidden in shelter or under berry invisibility, draw semi-transparent
+    const alpha = ((this.hiddenInBush && this.hidingSuccess) || this.berryInvisMs > 0) ? 0.30 : 1.0;
 
     // Facing direction vectors from smoothly-interpolated angle
     const fwdX = Math.cos(this.facingAngle);
@@ -3183,6 +3279,28 @@ class VenomArenaScene extends Phaser.Scene {
     const moving = (this.dragDir !== null) || (this.joystickActive);
     const walkPhase = moving ? this.tongueTimer * 0.007 : 0;
     const legSwing = Math.sin(walkPhase) * 4.5;
+
+    // ── Berry invisibility shimmer ─────────────────────────────────────────
+    if (this.berryInvisMs > 0) {
+      const pulse = 0.55 + 0.45 * Math.sin(this.tongueTimer / 220);
+      this.topGraphics.fillStyle(0xcc44ff, 0.18 * pulse);
+      this.topGraphics.fillCircle(x, y, 18);
+      this.topGraphics.lineStyle(1.5, 0xee88ff, 0.50 * pulse);
+      this.topGraphics.strokeCircle(x, y, 16);
+    }
+
+    // ── Banana speed lines ─────────────────────────────────────────────────
+    if (this.bananaBoostMs > 0 && moving) {
+      const trail = this.gloryTrail;
+      for (let i = 1; i < Math.min(trail.length, 8); i++) {
+        const t = 1 - i / 8;
+        this.topGraphics.lineStyle(2, 0xffdd00, t * 0.55);
+        this.topGraphics.beginPath();
+        this.topGraphics.moveTo(trail[i - 1].x, trail[i - 1].y);
+        this.topGraphics.lineTo(trail[i].x, trail[i].y);
+        this.topGraphics.strokePath();
+      }
+    }
 
     // ── Ground shadow ──────────────────────────────────────────────────────
     this.topGraphics.fillStyle(0x000000, 0.18 * alpha);
