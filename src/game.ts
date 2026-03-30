@@ -87,48 +87,68 @@ interface LevelConfig {
 }
 
 const LEVEL_CONFIGS: LevelConfig[] = [
-  // Level 1: Mountain Path — Z-shaped winding cliff trail (6 snakes, hiding shelters, escape gate)
+  // Level 1: Mountain Path — winding cliff trail with dead-end alcove, narrow cliff ledges, S-curve
   {
     name: 'Mountain Path',
     survivalGoal: 999, snakeCount: 0, snakeTickMs: 600, glorySpeed: 1.5, lives: 3, scoreMultiplier: 1, fogOfWar: false,
     bannerText: '🏔️ VENOM ARENA\nMOUNTAIN PATH',
     walls: [
-      // Upper segment — horizontal corridor rows 5-8 (walls top row4, bottom row9)
-      ...hwall(4,  1, 19),   // top wall:    row 4,  cols 1-19
-      ...hwall(9,  1, 15),   // bottom wall: row 9,  cols 1-15 (gap at 16-19 for turn)
-      // Connector — vertical corridor cols 17-19 (walls right col20, left col16)
-      ...vwall(20, 5, 17),   // right wall:  col 20, rows 5-17
-      ...vwall(16, 10, 17),  // left wall:   col 16, rows 10-17
-      // Lower segment — horizontal corridor rows 19-21 (walls top row18, bottom row22)
-      ...hwall(18, 20, 31),  // top wall:    row 18, cols 20-31 (gap at 16-19 = connector entry)
-      ...hwall(22, 16, 31),  // bottom wall: row 22, cols 16-31
-      ...vwall(16, 19, 21),  // left wall:   col 16, rows 19-21
+      // ── Upper segment ────────────────────────────────────────────────────────
+      ...hwall(4,  1, 19),    // top outer wall:        row 4,  cols 1-19
+      ...hwall(9,  1,  3),    // bottom wall (left):    row 9,  cols 1-3  (before dead-end gap)
+      ...hwall(9,  9, 15),    // bottom wall (right):   row 9,  cols 9-15 (after cliff; gap 16-19 for turn)
+      // Narrow cliff ledge: inner ceiling lowers corridor to 2 cells tall at cols 9-13
+      ...hwall(6,  9, 13),    // cliff inner ceiling:   row 6,  cols 9-13
+
+      // ── Dead-end reward alcove (below upper corridor, cols 4-8, rows 9-12) ──
+      ...vwall(3,  9, 12),    // alcove left wall:      col 3,  rows 9-12
+      ...hwall(13, 3,  9),    // alcove bottom wall:    row 13, cols 3-9
+      ...vwall(9,  9, 12),    // alcove right wall:     col 9,  rows 9-12
+
+      // ── Connector — vertical corridor cols 17-19 ─────────────────────────────
+      ...vwall(20, 5, 17),    // right wall:            col 20, rows 5-17
+      ...vwall(16, 10, 17),   // left wall:             col 16, rows 10-17
+      // Narrow cliff passage: narrows connector to 2 cols (18-19) at rows 12-14
+      ...vwall(17, 12, 14),   // connector cliff:       col 17, rows 12-14
+
+      // ── Lower segment ────────────────────────────────────────────────────────
+      ...hwall(18, 20, 31),   // top outer wall:        row 18, cols 20-31 (gap at 16-19 = connector entry)
+      ...hwall(22, 16, 31),   // bottom outer wall:     row 22, cols 16-31
+      ...vwall(16, 19, 21),   // left wall:             col 16, rows 19-21
+      // S-curve: inner walls force a winding path through the lower corridor
+      ...hwall(19, 21, 24),   // S-curve inner top:     row 19, cols 21-24 (forces rows 20-21)
+      ...hwall(21, 25, 29),   // S-curve inner bottom:  row 21, cols 25-29 (forces rows 19-20)
     ],
     poisonTiles: [],
-    iqGatePositions: [{ col: 30, row: 20, challengeIdx: 10 }],   // moved to exit end
+    iqGatePositions: [{ col: 30, row: 20, challengeIdx: 10 }],   // placed at exit end
     movingWallConfigs: [], hasBoss: false, speedRamp: false,
     gloryStart: { col: 0, row: 6 },   // outside the fence (col 0), just left of the entrance
     exitZone:   { col: 31, row: 20 }, // past the exit gate (exit is at col 30)
     collectibles: [
-      // Upper corridor (rows 5–8, cols 1–19) — 6 apples
-      [3,6], [6,7], [9,6], [12,7], [15,6], [17,7],
-      // Connector (cols 17–19, rows 9–17) — 2 apples
+      // Upper corridor — 6 apples (adjusted: [9,6] was on cliff wall → moved to [9,7])
+      [3,6], [6,7], [9,7], [12,7], [15,6], [17,7],
+      // Dead-end alcove rewards — 4 apples (risk vs. reward!)
+      [4,10], [6,11], [5,12], [7,10],
+      // Connector — 2 apples
       [18,11], [18,15],
-      // Lower corridor (rows 19–21, cols 17–31) — 5 apples
-      [21,20], [23,19], [25,20], [27,19], [29,20],
+      // Lower corridor — 5 apples (adjusted: [23,19] was on S-curve wall → moved to [23,20])
+      [21,20], [23,20], [25,20], [27,19], [29,20],
     ] as [number,number][],
     bushes: [[7, 6], [18, 14], [22, 20]],  // 3 hiding shelters along path
     snakeEnemyConfigs: [
       // 🟢 Slow Snakes (2) — plodding chasers, easy to outrun. Bright lime green.
-      { behavior: 'slow',   tickMs: 680, startCol: 10, startRow: 6,  color: 0x7CFF4F },
-      { behavior: 'slow',   tickMs: 680, startCol: 17, startRow: 14, color: 0x4db82e },
+      //    (startRow moved: 6→7 because row 6 is now the cliff inner ceiling wall)
+      { behavior: 'slow',   tickMs: 680, startCol: 10, startRow: 7,  color: 0x7CFF4F },
+      //    (startCol moved: 17→18 because col 17 is now the connector cliff wall at row 14)
+      { behavior: 'slow',   tickMs: 680, startCol: 18, startRow: 14, color: 0x4db82e },
       // 🟡 Patrol Snakes (2) — walk fixed routes; chase only if Glory steps within 4 cells. Gold/orange.
       { behavior: 'patrol', tickMs: 400, startCol:  5, startRow: 8,  color: 0xffcc00,
         patrolA: { col: 3,  row: 7 }, patrolB: { col: 15, row: 7 } },
       { behavior: 'patrol', tickMs: 400, startCol: 18, startRow: 10, color: 0xff8800,
         patrolA: { col: 18, row: 9 }, patrolB: { col: 18, row: 16 } },
       // 🔴 Hunter Snakes (2) — aggressive, speed scales fast with apples. Hot pink / crimson.
-      { behavior: 'hunter', tickMs: 320, startCol: 23, startRow: 19, color: 0xFF5AAE },
+      //    (startRow moved: 19→20 because row 19 is now the S-curve inner wall at col 23)
+      { behavior: 'hunter', tickMs: 320, startCol: 23, startRow: 20, color: 0xFF5AAE },
       { behavior: 'hunter', tickMs: 320, startCol: 24, startRow: 21, color: 0xff2244 },
     ],
   },
@@ -2364,17 +2384,26 @@ class VenomArenaScene extends Phaser.Scene {
     const g = this.bgGraphics;
 
     // Key pixel positions for Z-path walls:
-    //   Upper corridor: rows 5-8  (walls at row 4 top, row 9 bottom)
-    //   Connector:      cols 17-19 (walls at col 20 right, col 16 left)
-    //   Lower corridor: rows 19-21 (walls at row 18 top, row 22 bottom)
+    //   Upper corridor:  rows 5-8   (walls at row 4 top, row 9 bottom; cliff ledge row 6 inner, cols 9-13)
+    //   Dead-end alcove: cols 4-8, rows 9-12 (gap in bottom wall, col 3 left, col 9 right, row 13 floor)
+    //   Connector:       cols 17-19 (walls at col 20 right, col 16 left; cliff narrow col 17 rows 12-14)
+    //   Lower corridor:  rows 19-21 (walls at row 18 top, row 22 bottom; S-curve inner walls)
     const upTopY = 4  * CELL_SIZE;  // 80
     const upBotY = 9  * CELL_SIZE;  // 180
     const loTopY = 18 * CELL_SIZE;  // 360
     const loBotY = 22 * CELL_SIZE;  // 440
     const connLX = 16 * CELL_SIZE;  // 320
     const connRX = 20 * CELL_SIZE;  // 400
+    // Dead-end alcove pixel boundaries (cols 4-8 open, rows 9-12 interior)
+    const alcoveX  = 4 * CELL_SIZE;   // x=80  (left open edge, col 4)
+    const alcoveX2 = 9 * CELL_SIZE;   // x=180 (right wall, col 9)
+    const alcoveY2 = 13 * CELL_SIZE;  // y=260 (bottom wall, row 13)
+    // Narrow cliff ledge in upper corridor (cols 9-13 inner ceiling at row 6)
+    const cliffX1  = 9  * CELL_SIZE;  // x=180
+    const cliffX2  = 14 * CELL_SIZE;  // x=280
+    const cliffTopY = 6 * CELL_SIZE;  // y=120 (inner ceiling row 6)
 
-    // ── 1. Full canvas base: rocky cliff colour ───────────────────────
+    // ── 1. Full canvas base: rocky cliff color ───────────────────────
     g.fillStyle(0x4a3c2a);
     g.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -2463,6 +2492,30 @@ class VenomArenaScene extends Phaser.Scene {
     // Lower segment
     g.fillRect(connLX, loTopY, CANVAS_W - connLX, loBotY - loTopY);
 
+    // Dead-end alcove floor (reward pocket, cols 4-8, rows 9-12)
+    g.fillStyle(0xd4c07a);  // slightly darker sand — hints at hidden area
+    g.fillRect(alcoveX, upBotY, alcoveX2 - alcoveX, alcoveY2 - upBotY);
+
+    // Narrow cliff ledge: rocky overlay for sealed-off upper area (rows 4-5, cols 9-13)
+    g.fillStyle(0x5c4a30, 0.72);
+    g.fillRect(cliffX1, upTopY, cliffX2 - cliffX1, cliffTopY - upTopY);
+    // Strata lines on cliff face above ledge
+    g.fillStyle(0x3e3020, 0.5);
+    for (let ry = upTopY + 6; ry < cliffTopY; ry += 10) {
+      g.fillRect(cliffX1, ry, cliffX2 - cliffX1, 3);
+    }
+
+    // Connector narrow-cliff rocky patch: sealed-off strip at col 17, rows 12-14
+    g.fillStyle(0x5c4a30, 0.7);
+    g.fillRect(connLX + CELL_SIZE, 12 * CELL_SIZE, CELL_SIZE, 3 * CELL_SIZE);
+
+    // S-curve rocky patches in lower corridor
+    // Upper cutoff (row 19, cols 21-24 = top half of S blocked)
+    g.fillStyle(0x5c4a30, 0.65);
+    g.fillRect(21 * CELL_SIZE, loTopY, 4 * CELL_SIZE, CELL_SIZE);
+    // Lower cutoff (row 21, cols 25-29 = bottom half of S blocked)
+    g.fillRect(25 * CELL_SIZE, loBotY - 2 * CELL_SIZE, 5 * CELL_SIZE, CELL_SIZE);
+
     // Path centre highlight
     const uCY = (upTopY + upBotY) / 2;
     const lCY = (loTopY + loBotY) / 2;
@@ -2524,18 +2577,30 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Upper segment top fence    (row 4,  cols 1-19 = x 20-380)
     fenceH(CELL_SIZE, connRX, upTopY);
-    // Upper segment bottom fence (row 9,  cols 1-15 = x 20-300)  -- stops at cliff
-    fenceH(CELL_SIZE, 16 * CELL_SIZE, upBotY);
+    // Upper segment bottom fence — split around dead-end alcove opening (gap at cols 4-8)
+    fenceH(CELL_SIZE,    alcoveX,  upBotY);  // cols 1-3  (x 20-80)
+    fenceH(alcoveX2, 16 * CELL_SIZE, upBotY); // cols 9-15 (x 180-320)
+    // Narrow cliff inner ceiling fence (row 6, cols 9-13 = x 180-280)
+    fenceH(cliffX1, cliffX2, cliffTopY);
+    // Dead-end alcove walls
+    fenceV(3 * CELL_SIZE, upBotY, alcoveY2);          // alcove left  (col 3, rows 9-12)
+    fenceV(alcoveX2,      upBotY, alcoveY2);          // alcove right (col 9, rows 9-12)
+    fenceH(3 * CELL_SIZE, alcoveX2, alcoveY2);        // alcove floor (row 13, cols 3-9)
     // Connector right fence      (col 20, rows 5-17 = y 100-340)
     fenceV(connRX, upTopY + CELL_SIZE, loTopY);
     // Connector left fence       (col 16, rows 10-17 = y 200-340)
     fenceV(connLX, upBotY + CELL_SIZE, loTopY);
+    // Connector narrow cliff     (col 17, rows 12-14 = y 240-300)
+    fenceV(connLX + CELL_SIZE, 12 * CELL_SIZE, 15 * CELL_SIZE);
     // Lower segment top fence    (row 18, cols 20-31 = x 400-620)
     fenceH(connRX, CANVAS_W - CELL_SIZE, loTopY);
     // Lower segment bottom fence (row 22, cols 16-31 = x 320-620)
     fenceH(connLX, CANVAS_W - CELL_SIZE, loBotY);
     // Lower segment left fence   (col 16, rows 19-21 = y 380-420)
     fenceV(connLX, loTopY + CELL_SIZE, loBotY);
+    // S-curve inner fences (lower corridor winding path)
+    fenceH(21 * CELL_SIZE, 25 * CELL_SIZE, 19 * CELL_SIZE); // row 19, cols 21-24
+    fenceH(25 * CELL_SIZE, 30 * CELL_SIZE, 21 * CELL_SIZE); // row 21, cols 25-29
 
     // ── 7. ⚠️ WARNING SIGNS at open cliff edges ────────────────────────
     const warnSign = (wx: number, wy: number) => {
@@ -2551,6 +2616,10 @@ class VenomArenaScene extends Phaser.Scene {
     warnSign(19 * CELL_SIZE + CELL_SIZE / 2, upBotY + 14);
     // Open left edge beside connector
     warnSign(CELL_SIZE / 2, (upBotY + loTopY) / 2);
+    // Narrow cliff ledge entry warning (just before cliff ceiling drops, col 8-9)
+    warnSign(cliffX1 - CELL_SIZE / 2, upTopY + (cliffTopY - upTopY) / 2);
+    // Dead-end alcove entrance warning (hint: something is down there!)
+    warnSign(alcoveX + (alcoveX2 - alcoveX) / 2, upBotY + 10);
 
     // ── 8. TREES flanking path ─────────────────────────────────────────
     const tree = (tx: number, ty: number, s: number) => {
