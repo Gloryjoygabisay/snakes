@@ -717,6 +717,25 @@ class VenomArenaScene extends Phaser.Scene {
   private windGustDir    = 1;   // +1 = right, -1 = left
   private windGustTimer  = 0;   // ms until next gust
 
+  // Level 2 edge-danger: precarious ledge tiles along trail margins
+  // Phase: 0=safe, 1=crumbling (Glory on it), 2=broken (deals damage)
+  private edgeDangerMs   = 0;   // ms Glory has stood on a danger cell
+  private edgeDangerWarn = false;
+  private static EDGE_DANGER_CELLS: Array<[number, number]> = [
+    // Upper-left corridor edges (top & bottom row)
+    [4, 4], [7, 4], [10, 4], [11, 7], [8, 7],
+    // Middle trail edges
+    [14, 14], [17, 14], [19, 17], [16, 17],
+    // Upper-right corridor edges
+    [23, 4], [26, 4], [29, 7],
+  ];
+
+  // Level 2 forward-pressure: if Glory stalls, snakes speed up briefly
+  private lastForwardX   = 0;   // last recorded x when tracking stall
+  private stallTimerMs   = 0;   // ms without meaningful forward progress
+  private stallWarningMs = 0;   // countdown for "KEEP MOVING!" UI flash
+  private stallBoostMs   = 0;   // countdown for snake speed penalty
+
   // Heartbeat (any level, 1 life remaining)
   private heartbeatTimerMs = 0;
 
@@ -866,6 +885,12 @@ class VenomArenaScene extends Phaser.Scene {
     this.windGustActive = 0;
     this.windGustTimer  = 4000;
     this.windGustDir    = 1;
+    this.edgeDangerMs   = 0;
+    this.edgeDangerWarn = false;
+    this.lastForwardX   = this.glory.x;
+    this.stallTimerMs   = 0;
+    this.stallWarningMs = 0;
+    this.stallBoostMs   = 0;
     this.updatePistolHUD();
 
     this.survivalMs = 0;
@@ -1513,9 +1538,11 @@ class VenomArenaScene extends Phaser.Scene {
     // Per-snake tick accumulator (levels with snakeEnemyConfigs)
     if (this.usePerSnakeTick) {
       const gc3 = this.gloryCell();
+      // Level 2 stall penalty: snakes move 40% faster when Glory isn't advancing
+      const stallMult = (gameLevel === 2 && this.stallBoostMs > 0) ? 1.4 : 1.0;
       for (const snake of this.snakes) {
         if (!snake.alive || snake.stunnedMs > 0) continue;
-        snake.tickAccumMs += delta;
+        snake.tickAccumMs += delta * stallMult;
         while (snake.tickAccumMs >= snake.tickMs) {
           snake.tickAccumMs -= snake.tickMs;
           this.moveSnakeStep(snake, gc3);
@@ -1714,6 +1741,60 @@ class VenomArenaScene extends Phaser.Scene {
         const wyCell  = Math.floor(this.glory.y / CELL_SIZE);
         if (!this.isWallOrClosedGate(wxCell, wyCell)) {
           this.glory.x = wxNew;
+        }
+      }
+
+      // ── Edge-danger ledge tiles: standing on a precarious edge → fall ─
+      const gc2 = this.gloryCell();
+      const onEdge = VenomArenaScene.EDGE_DANGER_CELLS.some(
+        ([c, r]) => c === gc2.x && r === gc2.y
+      );
+      if (onEdge && this.glory.invincibleMs <= 0) {
+        const wasOff = this.edgeDangerMs === 0;
+        this.edgeDangerMs += delta;
+        this.edgeDangerWarn = true;
+        if (wasOff) {
+          // First step on crumbling edge — quick crack warning
+          this.overlayText.setText('⚠️ CRUMBLING EDGE!\nMove away!');
+          this.overlayText.setVisible(true);
+          this.time.delayedCall(900, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+        }
+        if (this.edgeDangerMs >= 1400) {
+          // Fell off the ledge
+          this.edgeDangerMs = 0;
+          this.loseLife();
+        }
+      } else {
+        this.edgeDangerMs = Math.max(0, this.edgeDangerMs - delta * 2); // recover quickly
+        if (this.edgeDangerMs === 0) this.edgeDangerWarn = false;
+      }
+
+      // ── Forward pressure: stalling lets snakes close in faster ────────
+      if (!this.roundOver) {
+        const movedForward = this.glory.x - this.lastForwardX;
+        if (movedForward > 8) {
+          // Made progress — reset stall
+          this.lastForwardX  = this.glory.x;
+          this.stallTimerMs  = 0;
+        } else {
+          this.stallTimerMs += delta;
+          if (this.stallTimerMs >= 2500 && this.stallBoostMs <= 0) {
+            // Snakes surge forward for 3 seconds
+            this.stallBoostMs   = 3000;
+            this.stallWarningMs = 2500;
+            this.stallTimerMs   = 0;
+            this.lastForwardX   = this.glory.x;
+            // Flash warning text
+            this.overlayText.setText('⚠️ KEEP MOVING!\n🐍 They\'re getting closer!');
+            this.overlayText.setVisible(true);
+            this.time.delayedCall(1800, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+          }
+        }
+        if (this.stallBoostMs > 0) {
+          this.stallBoostMs = Math.max(0, this.stallBoostMs - delta);
+        }
+        if (this.stallWarningMs > 0) {
+          this.stallWarningMs = Math.max(0, this.stallWarningMs - delta);
         }
       }
     }
@@ -2347,6 +2428,27 @@ class VenomArenaScene extends Phaser.Scene {
         this.overlayGraphics.fillStyle(0xcc0000, hbAlpha);
         this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
       }
+    }
+
+    // Level 2: edge-danger crumble warning — amber flash when on a ledge edge
+    if (gameLevel === 2 && this.edgeDangerWarn && this.edgeDangerMs > 0) {
+      const prog = Math.min(1, this.edgeDangerMs / 1400);
+      const aPulse = prog * (0.12 + 0.10 * Math.sin(Date.now() / 80));
+      this.overlayGraphics.fillStyle(0xff7700, aPulse);
+      this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      // Crack warning text
+      if (prog > 0.5) {
+        const cr = this.gloryCell();
+        this.topGraphics.lineStyle(2, 0xff4400, 0.7 * prog);
+        this.topGraphics.strokeRect(cr.x * CELL_SIZE, cr.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      }
+    }
+
+    // Level 2: stall warning — "KEEP MOVING!" yellow flash
+    if (gameLevel === 2 && this.stallWarningMs > 0) {
+      const wPulse = 0.05 + 0.08 * Math.abs(Math.sin(Date.now() / 140));
+      this.overlayGraphics.fillStyle(0xffdd00, wPulse);
+      this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
     }
 
     if (this.activePowerUp?.kind === 'flashlight') {
@@ -3533,7 +3635,21 @@ class VenomArenaScene extends Phaser.Scene {
       g.fillEllipse(r.x - r.size * 0.3, r.y - r.size * 0.2, r.size * 0.8, r.size * 0.5);
     }
 
-    // ── 11. Direction guide dots along trail centre ───────────────────
+    // ── 11. Edge-danger ledge cells — cracked amber glow at precarious edges ─
+    const edgeCellPulse = 0.18 + 0.08 * Math.sin(Date.now() / 550);
+    for (const [ec, er] of VenomArenaScene.EDGE_DANGER_CELLS) {
+      const ex = ec * CELL_SIZE;
+      const ey = er * CELL_SIZE;
+      // Cracked ground fill
+      g.fillStyle(0xcc5500, edgeCellPulse * 0.55);
+      g.fillRect(ex, ey, CELL_SIZE, CELL_SIZE);
+      // Crack lines
+      g.lineStyle(1, 0xff8800, edgeCellPulse * 0.7);
+      g.beginPath(); g.moveTo(ex + 4, ey + 3); g.lineTo(ex + 10, ey + 12); g.lineTo(ex + 16, ey + 8); g.strokePath();
+      g.beginPath(); g.moveTo(ex + 12, ey + 4); g.lineTo(ex + 8, ey + 16); g.strokePath();
+    }
+
+    // ── 12. Direction guide dots along trail centre ───────────────────
     const ucY  = (trailTopY + trailBotY) / 2;
     const mcY  = (midTopY   + midBotY)   / 2;
     const c1cX = (conn1LX   + conn1RX)   / 2;
