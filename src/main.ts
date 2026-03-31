@@ -111,26 +111,13 @@ function markCompleted(level: number): void {
   const c = getCompleted();
   if (!c.includes(level)) { c.push(level); localStorage.setItem('venom_completed', JSON.stringify(c)); }
 }
-function isModeUnlocked(mode: GameMode): boolean {
-  const req = MODES[mode].unlockAfterLevel;
-  return req === null || getCompleted().includes(req);
+function isModeUnlocked(_mode: GameMode): boolean {
+  return true;  // all modes always unlocked
 }
 function isLevelUnlocked(level: number, modeKey: GameMode): boolean {
   const mode = MODES[modeKey];
   const allLevels = [...mode.mainLevels, ...mode.bonusLevels];
-  if (!allLevels.includes(level)) return false;
-  if (mode.bonusLevels.includes(level)) {
-    // Bonus: need to have completed the bonusUnlockAfterLevel
-    if (!getCompleted().includes(mode.bonusUnlockAfterLevel)) return false;
-    // Also need previous bonus completed (sequential)
-    const idx = mode.bonusLevels.indexOf(level);
-    if (idx > 0 && !getCompleted().includes(mode.bonusLevels[idx - 1])) return false;
-    return true;
-  }
-  // Main: first level of mode needs mode unlock; subsequent need previous
-  if (level === mode.mainLevels[0]) return isModeUnlocked(modeKey);
-  const idx = mode.mainLevels.indexOf(level);
-  return getCompleted().includes(mode.mainLevels[idx - 1]);
+  return allLevels.includes(level);  // all levels always unlocked
 }
 
 // ── Next level in mode sequence ───────────────────────────────────────────
