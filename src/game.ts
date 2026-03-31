@@ -240,21 +240,68 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       { behavior: 'sentry' as const, tickMs: 340, startCol: 26, startRow: 5, color: 0xff8800 },
     ],
   },
-  // Level 3: Bamboo Bridge — very narrow 2-row bridge
+  // Level 3: Bamboo Bridge Maze — S-shaped bamboo bridge network over a dark abyss
+  // Correct path: Bridge1 → Connector1 DOWN → Bridge2 → Connector2 DOWN → Bridge3 → exit
+  // Dead ends: Bridge1 right stub, Bridge2 left, dead-end branch UP → Bridge4 (top-right)
   {
-    name: 'Bamboo Bridge',
-    survivalGoal: 999, snakeCount: 0, snakeTickMs: 500, glorySpeed: 1.2, lives: 3, scoreMultiplier: 1, fogOfWar: false,
-    bannerText: '🌉 BAMBOO BRIDGE',
+    name: 'Bamboo Bridge Maze',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 500, glorySpeed: 1.6, lives: 3,
+    scoreMultiplier: 1.2, fogOfWar: true, speedRamp: false,
+    bannerText: '🎋 BAMBOO BRIDGE MAZE\nIt creaks… and watches… 👁️',
     walls: [
-      ...hwall(10, 2, 29), ...hwall(11, 2, 29),
-      ...hwall(14, 2, 29), ...hwall(15, 2, 29),
-      ...vwall(7,  10, 14), ...vwall(13, 10, 14),
-      ...vwall(19, 10, 14), ...vwall(25, 10, 14),
+      // Bridge 1 (start): rows 4-5, cols 1-20
+      ...hwall(3, 1, 20), ...hwall(6, 1, 10), ...hwall(6, 13, 20), ...vwall(20, 3, 6),
+      // Connector 1 (DOWN): cols 11-12, rows 6-12
+      ...vwall(10, 6, 12), ...vwall(13, 6, 12),
+      // Bridge 2 (middle): rows 13-14, cols 7-23
+      ...hwall(12, 7, 10), ...hwall(12, 13, 19), ...hwall(12, 22, 23),
+      ...hwall(15, 7, 13), ...hwall(15, 16, 23),
+      ...vwall(7, 12, 15), ...vwall(23, 12, 15),
+      // Dead-end branch (UP from Bridge 2): cols 20-21, rows 6-12
+      ...vwall(19, 6, 12), ...vwall(22, 6, 12),
+      // Bridge 4 (top-right dead end): rows 4-5, cols 18-30
+      ...hwall(3, 18, 30), ...hwall(6, 18, 19), ...hwall(6, 22, 30), ...vwall(30, 3, 6),
+      // Connector 2 (DOWN): cols 14-15, rows 15-18
+      ...vwall(13, 15, 18), ...vwall(16, 15, 18),
+      // Bridge 3 (exit): rows 19-20, cols 12-30
+      ...hwall(18, 12, 13), ...hwall(18, 16, 30), ...hwall(21, 12, 30), ...vwall(12, 18, 21),
     ],
-    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 2, row: 12 },
-    exitZone:   { col: 30, row: 12 },
-    collectibles: [[5,12],[8,13],[11,12],[14,13],[17,12],[20,13],[23,12],[26,13]] as [number,number][],
+    poisonTiles: [],
+    iqGatePositions: [
+      { col: 15, row: 14, challengeIdx: 11 }, // guards correct Connector2 entry
+    ],
+    movingWallConfigs: [], hasBoss: false,
+    gloryStart: { col: 1, row: 4 },
+    exitZone:   { col: 30, row: 19 },
+    collectibles: [
+      // Bridge 1 — fruit trail hints the correct direction
+      [3, 4, 'apple'], [6, 5, 'apple'], [9, 4, 'banana'],
+      [16, 4, 'apple'],                       // dead-end fruit (tempting but wrong)
+      // Connector 1 — reward for finding the path
+      [11, 9, 'berry'],
+      // Bridge 2
+      [8, 13, 'apple'],                       // left dead end lure
+      [17, 14, 'banana'],                     // near correct Connector2
+      // Dead-end branch up
+      [20, 9, 'berry'],                       // lures player into dead end
+      // Bridge 4 dead end
+      [25, 4, 'apple'], [27, 5, 'banana'],
+      // Connector 2
+      [14, 16, 'apple'],
+      // Bridge 3 exit run
+      [18, 19, 'banana'], [23, 20, 'apple'], [27, 19, 'berry'],
+    ] as [number, number, FruitKind][],
+    bushes: [],
+    snakeEnemyConfigs: [
+      // Ambush sleepers — coiled in dead ends; wake when player enters
+      { behavior: 'sleeper' as const, tickMs: 500, startCol: 17, startRow: 4,  color: 0x7CFF4F }, // Bridge1 dead end
+      { behavior: 'sleeper' as const, tickMs: 480, startCol: 26, startRow: 5,  color: 0x4db82e }, // Bridge4 dead end
+      // Patrol guard — patrols Bridge2, blocks or forces detour
+      { behavior: 'patrol' as const, tickMs: 520, startCol: 13, startRow: 13, color: 0xffcc00,
+        patrolA: { col: 8, row: 13 }, patrolB: { col: 21, row: 14 } },
+      // Ambush — coiled in Bridge3 exit stretch
+      { behavior: 'sleeper' as const, tickMs: 460, startCol: 20, startRow: 19, color: 0xff2244 },
+    ],
   },
   // Level 4: Split Paths — two parallel routes, dead ends, choice
   {
@@ -749,6 +796,19 @@ class VenomArenaScene extends Phaser.Scene {
     [28, 6],   // bottom row only
   ];
 
+  private static LEVEL3_UNSTABLE_CELL_DEFS: Array<[number, number]> = [
+    // Bridge 1 planks
+    [5, 4],  [8, 5],  [14, 4],
+    // Connector 1
+    [11, 8], [12, 10],
+    // Bridge 2 planks
+    [9, 13], [15, 14], [21, 13],
+    // Dead-end branch
+    [20, 8],
+    // Bridge 3 planks
+    [16, 19], [22, 20], [26, 19],
+  ];
+
   // Level 2 constant-chase: hunters respawn at left edge after dying/retreating
   private hunterRespawnQueue: Array<{ timerMs: number; cfg: {
     behavior: 'hunter'; tickMs: number; startCol: number; startRow: number; color: number;
@@ -772,6 +832,11 @@ class VenomArenaScene extends Phaser.Scene {
   private stallTimerMs   = 0;   // ms without meaningful forward progress
   private stallWarningMs = 0;   // countdown for "KEEP MOVING!" UI flash
   private stallBoostMs   = 0;   // countdown for snake speed penalty
+
+  // Level 3 — Bamboo Bridge Maze
+  private bridgeCreakTimerMs = 0;  // countdown until next creak sound
+  private pathGlowMs = 0;          // ms remaining for berry path-reveal glow
+  private level3StillMs = 0;       // ms Glory hasn't moved — triggers creak
 
   // Heartbeat (any level, 1 life remaining)
   private heartbeatTimerMs = 0;
@@ -921,8 +986,11 @@ class VenomArenaScene extends Phaser.Scene {
     this.hunterRespawnQueue = [];
     this.collapsedCells = new Set();
     // Initialise unstable cells with staggered timers so they don't all crack at once
-    this.unstableCells = (gameLevel === 2)
-      ? VenomArenaScene.UNSTABLE_CELL_DEFS.map(([col, row], i) => ({
+    const cellDefs = gameLevel === 3
+      ? VenomArenaScene.LEVEL3_UNSTABLE_CELL_DEFS
+      : VenomArenaScene.UNSTABLE_CELL_DEFS;
+    this.unstableCells = (gameLevel === 2 || gameLevel === 3)
+      ? cellDefs.map(([col, row], i) => ({
           col, row, phase: 'stable' as const,
           timerMs: 5000 + i * 1200 + Math.random() * 3000,
         }))
@@ -939,6 +1007,9 @@ class VenomArenaScene extends Phaser.Scene {
     this.stallTimerMs   = 0;
     this.stallWarningMs = 0;
     this.stallBoostMs   = 0;
+    this.bridgeCreakTimerMs = 3000 + Math.random() * 2000;
+    this.pathGlowMs = 0;
+    this.level3StillMs = 0;
     this.updatePistolHUD();
 
     this.survivalMs = 0;
@@ -1881,47 +1952,6 @@ class VenomArenaScene extends Phaser.Scene {
         }
       }
 
-      // ── Unstable path: crack → collapse → recover cycle ───────────────
-      for (const uc of this.unstableCells) {
-        uc.timerMs = Math.max(0, uc.timerMs - delta);
-        if (uc.timerMs > 0) continue;
-        const key = `${uc.col},${uc.row}`;
-        switch (uc.phase) {
-          case 'stable':
-            uc.phase   = 'cracking';
-            uc.timerMs = 1800; // crack warning duration
-            this.playCrack();
-            this.cameras.main.shake(180, 0.004); // subtle pre-crack tremor
-            break;
-          case 'cracking':
-            uc.phase   = 'collapsed';
-            uc.timerMs = 3500; // how long the pit stays open
-            this.collapsedCells.add(key);
-            this.cameras.main.shake(320, 0.009); // heavy collapse thud
-            break;
-          case 'collapsed':
-            uc.phase   = 'recovering';
-            uc.timerMs = 1200;
-            this.collapsedCells.delete(key);
-            break;
-          case 'recovering':
-            uc.phase   = 'stable';
-            uc.timerMs = 7000 + Math.random() * 6000; // wait before cracking again
-            break;
-        }
-      }
-
-      // ── Collapsed cell damage: Glory takes a hit if she steps into a pit ─
-      if (this.glory.invincibleMs <= 0) {
-        const gc = this.gloryCell();
-        if (this.collapsedCells.has(`${gc.x},${gc.y}`)) {
-          this.loseLife();
-          // Push Glory one step back (away from the pit) so she isn't stuck in it
-          this.gloryVx = -this.gloryVx * 0.5;
-          this.gloryVy = -this.gloryVy * 0.5;
-        }
-      }
-
       // ── Constant chase: respawn retreating/stuck hunters behind Glory ──
       for (const sn of this.snakes) {
         if (sn.behavior !== 'hunter') continue;
@@ -1999,6 +2029,73 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
+    // ── Unstable path + collapsed cell damage (shared by L2 & L3) ─────────────
+    if ((gameLevel === 2 || gameLevel === 3) && !this.roundOver) {
+      // Crack → collapse → recover cycle
+      for (const uc of this.unstableCells) {
+        uc.timerMs = Math.max(0, uc.timerMs - delta);
+        if (uc.timerMs > 0) continue;
+        const key = `${uc.col},${uc.row}`;
+        switch (uc.phase) {
+          case 'stable':
+            uc.phase   = 'cracking';
+            uc.timerMs = 1800; // crack warning duration
+            this.playCrack();
+            this.cameras.main.shake(180, 0.004); // subtle pre-crack tremor
+            break;
+          case 'cracking':
+            uc.phase   = 'collapsed';
+            uc.timerMs = 3500; // how long the pit stays open
+            this.collapsedCells.add(key);
+            this.cameras.main.shake(320, 0.009); // heavy collapse thud
+            break;
+          case 'collapsed':
+            uc.phase   = 'recovering';
+            uc.timerMs = 1200;
+            this.collapsedCells.delete(key);
+            break;
+          case 'recovering':
+            uc.phase   = 'stable';
+            uc.timerMs = 7000 + Math.random() * 6000; // wait before cracking again
+            break;
+        }
+      }
+      // Collapsed cell damage: Glory takes a hit if she steps into a pit
+      if (this.glory.invincibleMs <= 0) {
+        const gc = this.gloryCell();
+        if (this.collapsedCells.has(`${gc.x},${gc.y}`)) {
+          this.loseLife();
+          // Push Glory one step back (away from the pit) so she isn't stuck in it
+          this.gloryVx = -this.gloryVx * 0.5;
+          this.gloryVy = -this.gloryVy * 0.5;
+        }
+      }
+    }
+
+    // ── Level 3: Bamboo Bridge Maze mechanics ─────────────────────────────────
+    if (gameLevel === 3 && !this.roundOver) {
+      this.fogScrollMs += delta;
+      // Ambient creak sounds
+      this.bridgeCreakTimerMs -= delta;
+      if (this.bridgeCreakTimerMs <= 0) {
+        this.bridgeCreakTimerMs = 2500 + Math.random() * 3000;
+        this.playBridgeCreak();
+      }
+      // Whisper: random soft hiss when Glory hasn't moved
+      const gloryMoving = Math.hypot(this.glory.x - this.lastForwardX, 0) > 2;
+      if (!gloryMoving) {
+        this.level3StillMs += delta;
+        if (this.level3StillMs > 1800 && Math.random() < 0.004) {
+          this.playWhisper();
+          this.level3StillMs = 0;
+        }
+      } else {
+        this.level3StillMs = 0;
+      }
+      // Berry path-glow countdown
+      if (this.pathGlowMs > 0) this.pathGlowMs -= delta;
+    }
+
     // Snake stun countdown
     for (const snake of this.snakes) {
       if (snake.stunnedMs > 0) {
@@ -2060,6 +2157,7 @@ class VenomArenaScene extends Phaser.Scene {
         } else if (c.kind === 'berry') {
           // 🍓 Berry → 4-second invisibility (snakes lose track of Glory)
           this.berryInvisibleMs = 4000;
+          if (gameLevel === 3) { this.pathGlowMs = 3000; }
         }
 
         // Level 1 (house): track fruit count + progressively speed up snakes
@@ -2406,6 +2504,47 @@ class VenomArenaScene extends Phaser.Scene {
       osc.connect(g); g.connect(ctx.destination);
       osc.start(t0); osc.stop(t0 + 0.35);
     });
+  }
+
+  // ── Level 3 bridge creak (sawtooth wobble) ────────────────────────────────
+  private playBridgeCreak(): void {
+    try {
+      const ctx = new AudioContext();
+      // Creak = slow frequency wobble + noise burst
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(180 + Math.random() * 60, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(120 + Math.random() * 40, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
+      ctx.close();
+    } catch { /* silent */ }
+  }
+
+  // ── Level 3 whisper (bandpass noise) ─────────────────────────────────────
+  private playWhisper(): void {
+    try {
+      const ctx = new AudioContext();
+      const bufSize = ctx.sampleRate * 0.8;
+      const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1) * 0.015;
+      const src = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      filter.type = 'bandpass'; filter.frequency.value = 2200; filter.Q.value = 0.8;
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.2);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.8);
+      src.buffer = buf;
+      src.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      src.start(ctx.currentTime);
+      ctx.close();
+    } catch { /* silent */ }
   }
 
   // ── Level 2 wind howl (procedural noise burst) ───────────────────────────
@@ -3731,6 +3870,187 @@ class VenomArenaScene extends Phaser.Scene {
     g.fillTriangle(sfx + 33, sfy - 7, sfx + 42, sfy - 1, sfx + 33, sfy + 5);
   }
 
+  // ── Level 3: Bamboo Bridge Maze — dark abyss with bridge planks ──────────
+  private drawLevel3Background(): void {
+    const g  = this.bgGraphics;
+    const CS = CELL_SIZE;
+
+    // 1. Very dark void/abyss background
+    g.fillStyle(0x060810);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Subtle blue-black gradient bands
+    g.fillStyle(0x080c18, 0.5);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H / 2);
+    g.fillStyle(0x040608, 0.5);
+    g.fillRect(0, CANVAS_H / 2, CANVAS_W, CANVAS_H / 2);
+
+    // 2. Abyss depth effect — faint vertical streak lines
+    g.lineStyle(1, 0x0a1428, 0.18);
+    for (let x = 10; x < CANVAS_W; x += 22) {
+      g.beginPath();
+      g.moveTo(x + Math.sin(x * 0.05) * 3, 0);
+      g.lineTo(x + Math.sin(x * 0.05 + 2) * 3, CANVAS_H);
+      g.strokePath();
+    }
+
+    // 3. Bridge planks — helper lambda
+    const drawBridgeCells = (cells: Array<[number, number]>) => {
+      for (const [col, row] of cells) {
+        const px = col * CS;
+        const py = row * CS;
+        // Dark wood base
+        g.fillStyle(0x6B3F1A);
+        g.fillRect(px, py, CS, CS);
+        // Lighter stripe in middle
+        g.fillStyle(0x8B5E3C, 0.7);
+        g.fillRect(px, py + CS * 0.35, CS, CS * 0.3);
+        // Plank crack lines every 4px
+        g.lineStyle(1, 0x3d2007, 0.55);
+        for (let cx = px + 4; cx < px + CS; cx += 4) {
+          g.beginPath(); g.moveTo(cx, py); g.lineTo(cx, py + CS); g.strokePath();
+        }
+      }
+    };
+
+    // Draw all bridge segments
+    // Bridge 1: rows 4-5, cols 1-19
+    const bridge1Cells: Array<[number, number]> = [];
+    for (let c = 1; c <= 19; c++) for (let r = 4; r <= 5; r++) bridge1Cells.push([c, r]);
+    drawBridgeCells(bridge1Cells);
+
+    // Connector 1: cols 11-12, rows 6-12
+    const conn1Cells: Array<[number, number]> = [];
+    for (let c = 11; c <= 12; c++) for (let r = 6; r <= 12; r++) conn1Cells.push([c, r]);
+    drawBridgeCells(conn1Cells);
+
+    // Bridge 2: rows 13-14, cols 8-22
+    const bridge2Cells: Array<[number, number]> = [];
+    for (let c = 8; c <= 22; c++) for (let r = 13; r <= 14; r++) bridge2Cells.push([c, r]);
+    drawBridgeCells(bridge2Cells);
+
+    // Dead-end branch: cols 20-21, rows 6-12
+    const deadBranchCells: Array<[number, number]> = [];
+    for (let c = 20; c <= 21; c++) for (let r = 6; r <= 12; r++) deadBranchCells.push([c, r]);
+    drawBridgeCells(deadBranchCells);
+
+    // Bridge 4: rows 4-5, cols 18-29
+    const bridge4Cells: Array<[number, number]> = [];
+    for (let c = 18; c <= 29; c++) for (let r = 4; r <= 5; r++) bridge4Cells.push([c, r]);
+    drawBridgeCells(bridge4Cells);
+
+    // Connector 2: cols 14-15, rows 15-18
+    const conn2Cells: Array<[number, number]> = [];
+    for (let c = 14; c <= 15; c++) for (let r = 15; r <= 18; r++) conn2Cells.push([c, r]);
+    drawBridgeCells(conn2Cells);
+
+    // Bridge 3: rows 19-20, cols 12-29
+    const bridge3Cells: Array<[number, number]> = [];
+    for (let c = 12; c <= 29; c++) for (let r = 19; r <= 20; r++) bridge3Cells.push([c, r]);
+    drawBridgeCells(bridge3Cells);
+
+    // 4. Bridge rope edges — dark rope-brown lines along bridge edges
+    g.lineStyle(2, 0x4a2d0a, 0.9);
+    // Bridge 1 top/bottom
+    g.beginPath(); g.moveTo(1*CS, 4*CS); g.lineTo(20*CS, 4*CS); g.strokePath();
+    g.beginPath(); g.moveTo(1*CS, 6*CS); g.lineTo(20*CS, 6*CS); g.strokePath();
+    // Connector 1 left/right
+    g.beginPath(); g.moveTo(11*CS, 6*CS); g.lineTo(11*CS, 13*CS); g.strokePath();
+    g.beginPath(); g.moveTo(13*CS, 6*CS); g.lineTo(13*CS, 13*CS); g.strokePath();
+    // Bridge 2 top/bottom
+    g.beginPath(); g.moveTo(8*CS, 13*CS); g.lineTo(23*CS, 13*CS); g.strokePath();
+    g.beginPath(); g.moveTo(8*CS, 15*CS); g.lineTo(23*CS, 15*CS); g.strokePath();
+    // Dead-end branch left/right
+    g.beginPath(); g.moveTo(20*CS, 6*CS); g.lineTo(20*CS, 13*CS); g.strokePath();
+    g.beginPath(); g.moveTo(22*CS, 6*CS); g.lineTo(22*CS, 13*CS); g.strokePath();
+    // Bridge 4 top/bottom
+    g.beginPath(); g.moveTo(18*CS, 4*CS); g.lineTo(30*CS, 4*CS); g.strokePath();
+    g.beginPath(); g.moveTo(18*CS, 6*CS); g.lineTo(30*CS, 6*CS); g.strokePath();
+    // Connector 2 left/right
+    g.beginPath(); g.moveTo(14*CS, 15*CS); g.lineTo(14*CS, 19*CS); g.strokePath();
+    g.beginPath(); g.moveTo(16*CS, 15*CS); g.lineTo(16*CS, 19*CS); g.strokePath();
+    // Bridge 3 top/bottom
+    g.beginPath(); g.moveTo(12*CS, 19*CS); g.lineTo(30*CS, 19*CS); g.strokePath();
+    g.beginPath(); g.moveTo(12*CS, 21*CS); g.lineTo(30*CS, 21*CS); g.strokePath();
+
+    // 5. Bamboo joints — small circles every 6 cols along bridge segments
+    g.fillStyle(0x5C8A00, 1.0);
+    for (let c = 1; c <= 19; c += 6) { g.fillCircle(c*CS + CS/2, 4*CS, 3); g.fillCircle(c*CS + CS/2, 6*CS, 3); }
+    for (let c = 8; c <= 22; c += 6) { g.fillCircle(c*CS + CS/2, 13*CS, 3); g.fillCircle(c*CS + CS/2, 15*CS, 3); }
+    for (let c = 18; c <= 29; c += 6) { g.fillCircle(c*CS + CS/2, 4*CS, 3); g.fillCircle(c*CS + CS/2, 6*CS, 3); }
+    for (let c = 12; c <= 29; c += 6) { g.fillCircle(c*CS + CS/2, 19*CS, 3); g.fillCircle(c*CS + CS/2, 21*CS, 3); }
+
+    // 6. Foggy abyss mist — two slow-drifting fog layers
+    const f1 = (this.fogScrollMs / 16) % CANVAS_W;
+    const f2 = (this.fogScrollMs / 11) % CANVAS_W;
+    // Layer 1: drifting left
+    g.fillStyle(0x081428, 0.35);
+    g.fillRect(-f1,          80, CANVAS_W * 1.5, 40);
+    g.fillRect(-f1 + CANVAS_W, 80, CANVAS_W * 1.5, 40);
+    g.fillRect(-f1,          220, CANVAS_W * 1.5, 35);
+    g.fillRect(-f1 + CANVAS_W, 220, CANVAS_W * 1.5, 35);
+    g.fillRect(-f1,          360, CANVAS_W * 1.5, 30);
+    g.fillRect(-f1 + CANVAS_W, 360, CANVAS_W * 1.5, 30);
+    // Layer 2: drifting right
+    g.fillStyle(0x0a1f3c, 0.18);
+    g.fillRect(f2,           130, CANVAS_W * 1.5, 30);
+    g.fillRect(f2 - CANVAS_W, 130, CANVAS_W * 1.5, 30);
+    g.fillRect(f2,           290, CANVAS_W * 1.5, 25);
+    g.fillRect(f2 - CANVAS_W, 290, CANVAS_W * 1.5, 25);
+    g.fillRect(f2,           420, CANVAS_W * 1.5, 28);
+    g.fillRect(f2 - CANVAS_W, 420, CANVAS_W * 1.5, 28);
+
+    // 7. Glowing fruit trail — if pathGlowMs > 0, soft green glow near glory
+    if (this.pathGlowMs > 0) {
+      const glowAlpha = (this.pathGlowMs / 3000) * 0.45;
+      const gc = this.gloryCell();
+      // Highlight nearby bridge path cells
+      g.fillStyle(0x44ff88, glowAlpha);
+      for (let dc = -3; dc <= 3; dc++) {
+        for (let dr = -2; dr <= 2; dr++) {
+          const nc = gc.x + dc;
+          const nr = gc.y + dr;
+          if (nc >= 0 && nc < 32 && nr >= 0 && nr < 24) {
+            g.fillRect(nc * CS + 1, nr * CS + 1, CS - 2, CS - 2);
+          }
+        }
+      }
+    }
+
+    // 8. Ambient ember sparks — faint orange-red dots pulsing at abyss depth
+    const t = Date.now() * 0.001;
+    const embers: Array<[number, number]> = [
+      [120, 380], [280, 430], [450, 400], [580, 460],
+    ];
+    for (let i = 0; i < embers.length; i++) {
+      const pulse = 0.3 + 0.3 * Math.sin(t * 1.2 + i * 1.7);
+      g.fillStyle(0xff4400, pulse * 0.6);
+      g.fillCircle(embers[i][0], embers[i][1], 3 + Math.sin(t + i) * 1.5);
+    }
+
+    // Draw unstable/collapsed cell visual overlays
+    for (const uc of this.unstableCells) {
+      const px = uc.col * CS;
+      const py = uc.row * CS;
+      if (uc.phase === 'cracking') {
+        g.fillStyle(0xff8800, 0.45);
+        g.fillRect(px, py, CS, CS);
+        // crack lines
+        g.lineStyle(1, 0xff4400, 0.7);
+        g.beginPath(); g.moveTo(px + 3, py + 3); g.lineTo(px + CS - 3, py + CS - 3); g.strokePath();
+        g.beginPath(); g.moveTo(px + CS - 3, py + 3); g.lineTo(px + 3, py + CS - 3); g.strokePath();
+      } else if (uc.phase === 'collapsed') {
+        g.fillStyle(0x000000, 0.85);
+        g.fillRect(px, py, CS, CS);
+        g.fillStyle(0x1a0a00, 0.5);
+        g.fillCircle(px + CS/2, py + CS/2, CS/3);
+      } else if (uc.phase === 'recovering') {
+        g.fillStyle(0x3d2007, 0.6);
+        g.fillRect(px, py, CS, CS);
+      }
+    }
+  }
+
   // ── Level 2: Edge of Survival — cold mountain cliff background ─────────────
   private drawLevel2Background(): void {
     const g  = this.bgGraphics;
@@ -3987,6 +4307,8 @@ class VenomArenaScene extends Phaser.Scene {
     if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) { this.drawLevel1Background(); return; }
     // Level 2: "Edge of Survival" — cold mountain cliff, fog abyss, wind
     if (gameLevel === 2) { this.drawLevel2Background(); return; }
+    // Level 3: "Bamboo Bridge Maze" — dark abyss, bamboo bridges, fog
+    if (gameLevel === 3) { this.drawLevel3Background(); return; }
 
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);
