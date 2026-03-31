@@ -707,6 +707,11 @@ class VenomArenaScene extends Phaser.Scene {
   private pistolBullets = 0;
   private bullets: Bullet[] = [];
 
+  // Level 2 atmosphere — wind particles, fog scroll, wind sound timer
+  private windParticles: Array<{ x: number; y: number; size: number; alpha: number; speed: number }> = [];
+  private fogScrollMs  = 0;
+  private windTimerMs  = 0;
+
   // Bite / fall animation
   private gloryFallMs = 0;    // counts down from 1200 → 0 after a snake bite
 
@@ -891,6 +896,32 @@ class VenomArenaScene extends Phaser.Scene {
       this.overlayText.setText(config.bannerText);
       this.overlayText.setVisible(true);
       this.time.delayedCall(2500, () => { this.overlayText.setVisible(false); });
+    }
+
+    // Level 2 — "Edge of Survival" atmosphere init
+    if (gameLevel === 2) {
+      this.fogScrollMs  = 0;
+      this.windTimerMs  = 2200;
+      this.windParticles = Array.from({ length: 32 }, () => ({
+        x:     Math.random() * CANVAS_W,
+        y:     90 + Math.random() * 340,
+        size:  1.0 + Math.random() * 2.2,
+        alpha: 0.07 + Math.random() * 0.25,
+        speed: 0.5 + Math.random() * 1.5,
+      }));
+      // Cinematic intro — quiet → hiss → "run"
+      this.overlayText.setText('…silence.\nToo quiet…');
+      this.overlayText.setVisible(true);
+      this.time.delayedCall(1600, () => {
+        this.playHiss(0.6);
+        this.overlayText.setText('🐍 Hissing behind you…');
+        this.time.delayedCall(1200, () => {
+          this.overlayText.setText('🌄 NARROW TRAIL\nThey followed you — RUN! 🏃‍♀️');
+          this.time.delayedCall(1500, () => this.overlayText.setVisible(false));
+        });
+      });
+    } else {
+      this.windParticles = [];
     }
   }
 
@@ -1624,6 +1655,24 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
+    // Level 2: animate fog + wind particles + periodic wind sound
+    if (gameLevel === 2) {
+      this.fogScrollMs += delta;
+      for (const p of this.windParticles) {
+        p.x += p.speed * delta * 0.05;
+        if (p.x > CANVAS_W + 5) {
+          p.x = -5;
+          p.y = 90 + Math.random() * 340;
+          p.alpha = 0.07 + Math.random() * 0.25;
+        }
+      }
+      this.windTimerMs = Math.max(0, this.windTimerMs - delta);
+      if (this.windTimerMs === 0) {
+        this.playWind();
+        this.windTimerMs = 3500 + Math.random() * 2500;
+      }
+    }
+
     // Snake stun countdown
     for (const snake of this.snakes) {
       if (snake.stunnedMs > 0) {
@@ -2169,6 +2218,31 @@ class VenomArenaScene extends Phaser.Scene {
       osc.connect(g); g.connect(ctx.destination);
       osc.start(t0); osc.stop(t0 + 0.35);
     });
+  }
+
+  // ── Level 2 wind howl (procedural noise burst) ───────────────────────────
+  private playWind(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const dur    = 1.4;
+    const bufLen = Math.floor(ctx.sampleRate * dur);
+    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp  = ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 380; bp.Q.value = 0.45;
+    const lp  = ctx.createBiquadFilter();
+    lp.type = 'lowpass';  lp.frequency.value = 620; lp.Q.value = 0.3;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.10, ctx.currentTime + 0.35);
+    gain.gain.linearRampToValueAtTime(0.13, ctx.currentTime + 0.70);
+    gain.gain.linearRampToValueAtTime(0.07, ctx.currentTime + 1.05);
+    gain.gain.linearRampToValueAtTime(0,    ctx.currentTime + dur);
+    src.connect(bp); bp.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    src.start(); src.stop(ctx.currentTime + dur);
   }
 
   // ── Wood Stick ─────────────────────────────────────────────────────────────
@@ -3315,11 +3389,206 @@ class VenomArenaScene extends Phaser.Scene {
     g.fillTriangle(sfx + 33, sfy - 7, sfx + 42, sfy - 1, sfx + 33, sfy + 5);
   }
 
+  // ── Level 2: Edge of Survival — cold mountain cliff background ─────────────
+  private drawLevel2Background(): void {
+    const g  = this.bgGraphics;
+    const CS = CELL_SIZE;
+
+    // Key pixel boundaries matching the Level 2 S-curve wall layout
+    const trailTopY =  4 * CS;   //  80 — top wall of both upper corridors
+    const trailBotY =  7 * CS;   // 140 — bottom wall of upper corridors
+    const conn1LX   = 11 * CS;   // 220 — left wall of connector 1
+    const conn1RX   = 16 * CS;   // 320 — right wall of connector 1
+    const midTopY   = 14 * CS;   // 280 — top wall of middle trail
+    const midBotY   = 17 * CS;   // 340 — bottom wall of middle trail
+    const conn2LX   = 19 * CS;   // 380 — left wall of connector 2
+    const conn2RX   = 23 * CS;   // 460 — right wall of connector 2
+
+    // ── 1. Full canvas base — deep abyss void ────────────────────────
+    g.fillStyle(0x07090e);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // ── 2. Cold night sky (rows 0–4) ─────────────────────────────────
+    g.fillStyle(0x0d1b30);
+    g.fillRect(0, 0, CANVAS_W, trailTopY);
+    g.fillStyle(0x162540, 0.65);
+    g.fillRect(0, 0, CANVAS_W, trailTopY * 0.5);
+    // Cold horizon glow — faint amber where cliff meets sky
+    g.fillStyle(0x6a2e0a, 0.22);
+    g.fillRect(0, trailTopY - 22, CANVAS_W, 22);
+    g.fillStyle(0x3a1608, 0.13);
+    g.fillRect(0, trailTopY - 38, CANVAS_W, 22);
+
+    // Stars — deterministic positions
+    g.fillStyle(0xccd8ee, 0.88);
+    for (const [sx, sy, big] of [
+      [18,7,0],[55,14,0],[102,5,1],[148,18,0],[196,9,1],[242,3,0],[288,16,0],
+      [334,7,1],[378,20,0],[424,4,0],[468,13,1],[512,8,0],[558,17,0],[602,5,1],
+      [30,39,0],[88,47,1],[158,32,0],[224,51,0],[298,37,1],[362,55,0],[430,41,0],
+      [496,57,1],[560,35,0],[618,49,0],[72,61,0],[168,67,1],[260,57,0],[540,59,0],
+    ] as [number, number, number][]) {
+      g.fillCircle(sx, sy, big ? 1.8 : 1.1);
+    }
+    // Bright foreground stars with tiny halo
+    g.fillStyle(0xffffff, 0.95);
+    for (const [sx, sy] of [[136, 23], [410, 29], [570, 11]] as [number, number][]) {
+      g.fillCircle(sx, sy, 2.2);
+      g.fillStyle(0xccd8ee, 0.10); g.fillCircle(sx, sy, 5); g.fillStyle(0xffffff, 0.95);
+    }
+
+    // Crescent moon — upper-right
+    const moonX = 556, moonY = 33;
+    g.fillStyle(0xd4c490, 0.90); g.fillCircle(moonX, moonY, 13);
+    g.fillStyle(0x0d1b30, 1.0);  g.fillCircle(moonX + 7, moonY - 3, 11);  // crescent cut
+    g.fillStyle(0xd4c490, 0.07); g.fillCircle(moonX, moonY, 26);
+    g.fillStyle(0xd4c490, 0.04); g.fillCircle(moonX, moonY, 40);
+
+    // ── 3. Jagged mountain silhouettes ────────────────────────────────
+    const groundY = trailTopY + 8;
+    g.fillStyle(0x111a26, 0.95);
+    for (const [x1, xp, yp, x2] of [
+      [0,   60,  trailTopY - 34, 118],
+      [78,  154, trailTopY - 54, 228],
+      [182, 264, trailTopY - 46, 342],
+      [272, 358, trailTopY - 62, 444],
+      [376, 458, trailTopY - 38, 538],
+      [472, 548, trailTopY - 50, 642],
+    ] as [number, number, number, number][]) {
+      g.fillTriangle(x1, groundY, xp, yp, x2, groundY);
+    }
+    // Snow caps on two tallest peaks
+    g.fillStyle(0xdde8f4, 0.26);
+    g.fillTriangle(222, trailTopY - 22, 264, trailTopY - 54, 306, trailTopY - 20);
+    g.fillTriangle(318, trailTopY - 30, 358, trailTopY - 62, 398, trailTopY - 28);
+
+    // ── 4. Rocky cliff face (non-trail zones) ─────────────────────────
+    // Zone A: left of conn1LX, between upper and middle trail
+    g.fillStyle(0x1c1810); g.fillRect(0,       trailBotY, conn1LX,             midBotY - trailBotY);
+    // Zone B: between conn1RX and conn2LX (gap between the two connectors)
+    g.fillStyle(0x1a160e); g.fillRect(conn1RX,  trailBotY, conn2LX - conn1RX,  midBotY - trailBotY);
+    // Zone C: right of conn2RX, between upper and middle trail
+    g.fillStyle(0x1c1810); g.fillRect(conn2RX,  trailBotY, CANVAS_W - conn2RX, midBotY - trailBotY);
+
+    // Rock strata — horizontal stress cracks
+    g.fillStyle(0x0e0b07, 0.55);
+    for (let ry = trailBotY + 12; ry < midBotY - 5; ry += 22) {
+      const t = (ry - trailBotY) / (midBotY - trailBotY);
+      g.fillRect(0,            ry, conn1LX * (0.40 + 0.48 * Math.sin(t * 6.3 + 0.3)), 4);
+      g.fillRect(conn1RX + 8,  ry, (conn2LX - conn1RX) * (0.30 + 0.45 * Math.sin(t * 5.1 + 1.1)), 3);
+      g.fillRect(conn2RX + 6,  ry, (CANVAS_W - conn2RX) * (0.38 + 0.40 * Math.sin(t * 5.7 + 0.7)), 4);
+    }
+    // Lighter strata glints (cold grey)
+    g.fillStyle(0x383028, 0.17);
+    for (let ry = trailBotY + 4; ry < midBotY - 5; ry += 22) {
+      g.fillRect(4, ry, conn1LX * 0.52, 2);
+      g.fillRect(conn1RX + 12, ry, (conn2LX - conn1RX) * 0.38, 2);
+      g.fillRect(conn2RX + 10, ry, (CANVAS_W - conn2RX) * 0.38, 2);
+    }
+    // Deep crevices
+    g.fillStyle(0x060504, 0.82);
+    for (const [cx, cy, cw] of [
+      [22,158,46],[90,174,34],[154,192,50],[30,212,42],[112,230,36],[160,250,52],
+      [62,268,40],[170,284,34],[192,302,46],[342,162,38],[402,179,32],[460,198,42],
+      [348,217,50],[420,236,34],[362,254,44],[448,272,38],[488,165,36],[544,182,43],
+      [600,201,32],[512,222,48],[572,242,36],[506,264,40],[562,287,34],
+    ] as [number, number, number][]) {
+      g.fillRect(cx, cy, cw, 3);
+    }
+
+    // ── 5. Deep abyss below middle trail ─────────────────────────────
+    g.fillStyle(0x130f08, 0.94); g.fillRect(0, midBotY,      CANVAS_W, 26);
+    g.fillStyle(0x0b0906, 0.97); g.fillRect(0, midBotY + 22, CANVAS_W, 36);
+    g.fillStyle(0x060504, 1.00); g.fillRect(0, midBotY + 52, CANVAS_W, 48);
+    g.fillStyle(0x000000);       g.fillRect(0, midBotY + 90, CANVAS_W, CANVAS_H - midBotY - 90);
+
+    // ── 6. Animated fog drifting through the abyss ────────────────────
+    // Three layers at different speeds for parallax depth
+    const f1 = (this.fogScrollMs / 14) % CANVAS_W;
+    g.fillStyle(0x283040, 0.11);
+    for (let fx = -CANVAS_W + f1; fx < CANVAS_W + 10; fx += CANVAS_W * 0.62) {
+      g.fillEllipse(fx + CANVAS_W * 0.32, midBotY + 26, CANVAS_W * 0.68, 36);
+    }
+    const f2 = (this.fogScrollMs / 9) % CANVAS_W;
+    g.fillStyle(0x1e2836, 0.09);
+    for (let fx = -CANVAS_W + f2; fx < CANVAS_W + 10; fx += CANVAS_W * 0.50) {
+      g.fillEllipse(fx + CANVAS_W * 0.25, midBotY + 58, CANVAS_W * 0.54, 28);
+    }
+    const f3 = (this.fogScrollMs / 6) % CANVAS_W;
+    g.fillStyle(0x161e2c, 0.07);
+    for (let fx = -CANVAS_W + f3; fx < CANVAS_W + 10; fx += CANVAS_W * 0.38) {
+      g.fillEllipse(fx + CANVAS_W * 0.19, midBotY + 84, CANVAS_W * 0.42, 20);
+    }
+
+    // ── 7. Stone path fills (weathered dark ledge) ───────────────────
+    const stone = 0x4e4438;
+    g.fillStyle(stone);
+    // Upper-left corridor (including wall row 4)
+    g.fillRect(0,       trailTopY, conn1RX,             trailBotY - trailTopY);
+    // Connector 1 vertical strip (down from upper trail to middle trail)
+    g.fillRect(conn1LX, trailTopY, conn1RX - conn1LX,   midBotY - trailTopY);
+    // Middle trail
+    g.fillRect(conn1LX, midTopY,   conn2RX - conn1LX,   midBotY - midTopY);
+    // Connector 2 vertical strip (back up to upper trail level)
+    g.fillRect(conn2LX, trailTopY, conn2RX - conn2LX,   midBotY - trailTopY);
+    // Upper-right corridor
+    g.fillRect(conn2LX, trailTopY, CANVAS_W - conn2LX,  trailBotY - trailTopY);
+
+    // Stone surface grain
+    g.fillStyle(0x3a3028, 0.18);
+    for (let x = 10; x < conn1RX - 10; x += 44) {
+      g.fillRect(x, trailTopY + 4, 28, trailBotY - trailTopY - 8);
+    }
+    for (let x = conn2LX + 10; x < CANVAS_W - 10; x += 44) {
+      g.fillRect(x, trailTopY + 4, 28, trailBotY - trailTopY - 8);
+    }
+    for (let x = conn1LX + 8; x < conn2RX - 8; x += 40) {
+      g.fillRect(x, midTopY + 4, 24, midBotY - midTopY - 8);
+    }
+    // Cold frost glint along top edge of each ledge
+    g.fillStyle(0x7a7262, 0.30);
+    g.fillRect(0,       trailTopY, conn1RX,            3);
+    g.fillRect(conn2LX, trailTopY, CANVAS_W - conn2LX, 3);
+    g.fillRect(conn1LX, midTopY,   conn2RX - conn1LX,  3);
+    // Ledge drop shadow (bottom edge)
+    g.fillStyle(0x242018, 0.48);
+    g.fillRect(0,       trailBotY - 6, conn1LX,            6);
+    g.fillRect(conn2LX, trailBotY - 6, CANVAS_W - conn2LX, 6);
+    g.fillRect(conn1LX, midBotY   - 6, conn2RX - conn1LX,  6);
+
+    // ── 8. Cliff-edge danger lines — pulsing orange glow ─────────────
+    const edgePulse = 0.20 + 0.14 * Math.sin(Date.now() / 480);
+    g.lineStyle(2, 0xff6600, edgePulse);
+    g.beginPath(); g.moveTo(0, trailBotY);       g.lineTo(conn1LX, trailBotY); g.strokePath();
+    g.beginPath(); g.moveTo(conn2LX, trailBotY); g.lineTo(CANVAS_W, trailBotY); g.strokePath();
+    g.lineStyle(2, 0xff3300, edgePulse + 0.10);
+    g.beginPath(); g.moveTo(conn1LX, midBotY);   g.lineTo(conn2RX, midBotY); g.strokePath();
+
+    // ── 9. Wind particles — drifting dust/ice crystals ────────────────
+    for (const p of this.windParticles) {
+      g.fillStyle(0xb0c4d8, p.alpha);
+      g.fillEllipse(p.x, p.y, p.size * 2.8, p.size);
+    }
+
+    // ── 10. Direction guide dots along trail centre ───────────────────
+    const ucY  = (trailTopY + trailBotY) / 2;
+    const mcY  = (midTopY   + midBotY)   / 2;
+    const c1cX = (conn1LX   + conn1RX)   / 2;
+    const c2cX = (conn2LX   + conn2RX)   / 2;
+    g.fillStyle(0xc07830, 0.36);
+    for (let dx = 30;        dx < conn1LX - 16;   dx += 22) g.fillCircle(dx,    ucY,  2.0);
+    for (let dy = trailBotY + 18; dy < midTopY - 12; dy += 22) g.fillCircle(c1cX, dy,   2.0);
+    for (let dx = conn1LX + 18; dx < conn2LX - 12;   dx += 22) g.fillCircle(dx,   mcY,  2.0);
+    for (let dy = midTopY - 12; dy > trailBotY + 12;  dy -= 22) g.fillCircle(c2cX, dy,   2.0);
+    for (let dx = conn2LX + 18; dx < CANVAS_W - 22;   dx += 22) g.fillCircle(dx,   ucY,  2.0);
+  }
+
   private drawBackground(): void {
     // House layout uses its own interior background
     if (LEVEL_CONFIGS[gameLevel - 1].houseLayout) { this.drawHouseBackground(); return; }
     // Level 1 (Mountain Path) uses its own clean visual design — skip if replaced
     if (gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) { this.drawLevel1Background(); return; }
+    // Level 2: "Edge of Survival" — cold mountain cliff, fog abyss, wind
+    if (gameLevel === 2) { this.drawLevel2Background(); return; }
 
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);
