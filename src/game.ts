@@ -202,7 +202,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       ...hwall(14, 16, 21),  // top wall (cols 12–15 left open = connector 1 entry)
       ...hwall(17, 12, 22),  // bottom wall (col 22 closed; connector 2 entry at cols 20–22 above)
       // ── Connector 2: cols 20–22, rows 6–16 (going UP) ───────────────────
-      ...vwall(19,  6, 16),  // left wall
+      ...vwall(19,  6, 14),  // left wall (stops above middle trail so rows 15-16 stay open)
       ...vwall(23,  5, 17),  // right wall
       // ── Upper-right trail: rows 5–6, cols 22–30 ─────────────────────────
       ...hwall(4, 20, 30),   // top wall (also seals top of connector 2 entry)
@@ -1468,8 +1468,8 @@ class VenomArenaScene extends Phaser.Scene {
       // ── Level 2: momentum-based balance movement ──────────────────────
       // Physics constants
       const ACCEL    = 0.28;   // acceleration per frame unit toward input
-      const FRICTION = 0.80;   // velocity decay each frame (lower = slidier)
-      const MAX_VEL  = 2.6;    // max speed magnitude (px per 16ms frame)
+      const FRICTION = 0.84;   // velocity decay each frame (higher = stops faster, easier turns)
+      const MAX_VEL  = 2.4;    // max speed magnitude (px per 16ms frame)
 
       const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
       const baseSpd = Math.min(this.glory.speed, 1.2);
@@ -1482,8 +1482,8 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.joystickActive && this.dragDir) {
         // At high speed, sideways responsiveness is reduced (harder to steer)
         const speedRatio = Math.min(1, curSpeed / MAX_VEL);
-        // Control factor: 1.0 at rest → 0.45 at full speed (sloppy at high speed)
-        const controlFactor = 1.0 - speedRatio * 0.55;
+        // Control factor: 1.0 at rest → 0.65 at full speed (sloppy but still steerable)
+        const controlFactor = 1.0 - speedRatio * 0.35;
 
         // Decompose input into forward and sideways relative to current velocity
         let accelX = this.dragDir.dx * rev * ACCEL * targetSpd * controlFactor;
