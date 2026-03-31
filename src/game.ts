@@ -732,13 +732,19 @@ class VenomArenaScene extends Phaser.Scene {
   private collapsedCells = new Set<string>(); // 'col,row' → temporarily blocks movement
   // Predefined trail cells that cycle through crack → collapse → recover
   private static UNSTABLE_CELL_DEFS: Array<[number, number]> = [
-    [5,  5], [5,  6],   // upper-left corridor section A
-    [10, 5], [10, 6],   // upper-left corridor section B
-    [13, 10],[13, 11],  // connector 1 mid-point
-    [16, 15],[16, 16],  // middle trail section A
-    [19, 15],[19, 16],  // middle trail section B
-    [21, 9], [21, 12],  // connector 2 points
-    [25, 5], [27, 5],   // upper-right corridor sections
+    // Upper-left corridor (rows 5-6, 2 rows wide) — alternate rows, never same column
+    [5,  6],   // bottom row only — top row [5,5] stays clear
+    [10, 5],   // top row only — bottom row [10,6] stays clear
+    // Connector 1 (cols 12-15, rows 7-14) — wide enough, single cells fine
+    [13, 10],
+    // Middle trail (rows 15-16, 2 rows wide) — alternate rows
+    [16, 15],  // top row only — [16,16] stays clear
+    [19, 16],  // bottom row only — [19,15] stays clear
+    // Connector 2 (cols 20-22, rows 6-16) — single cells, plenty of room
+    [21, 9], [21, 12],
+    // Upper-right corridor (rows 5-6, 2 rows wide) — alternate rows
+    [25, 5],   // top row only
+    [28, 6],   // bottom row only
   ];
 
   // Level 2 constant-chase: hunters respawn at left edge after dying/retreating
@@ -1871,6 +1877,24 @@ class VenomArenaScene extends Phaser.Scene {
             this.cameras.main.shake(180, 0.004); // subtle pre-crack tremor
             break;
           case 'cracking':
+            // Safety: only collapse if Glory has a clear exit from this column
+            // Check 4 neighbours — if at least one is walkable, safe to collapse
+            {
+              const neighbours: [number,number][] = [
+                [uc.col-1, uc.row], [uc.col+1, uc.row],
+                [uc.col, uc.row-1], [uc.col, uc.row+1],
+              ];
+              const hasEscape = neighbours.some(
+                ([nc, nr]) => !this.isWallOrClosedGate(nc, nr) &&
+                              nc >= 0 && nr >= 0 && nc < COLS && nr < ROWS
+              );
+              if (!hasEscape) {
+                // Postpone collapse — reset to stable quickly so player isn't trapped
+                uc.phase   = 'recovering';
+                uc.timerMs = 1500;
+                break;
+              }
+            }
             uc.phase   = 'collapsed';
             uc.timerMs = 3500; // how long the pit stays open
             this.collapsedCells.add(key);
