@@ -35,6 +35,8 @@ const CHALLENGES: Challenge[] = [
   { q: '🍎 🍌 🍓 🍎 🍌 ?\n(What fruit comes next in the pattern?)', choices: ['🍎 Apple', '🍓 Berry', '🍌 Banana'], answer: 1 },
   { q: 'Which fruit makes Glory\ninvisible to snakes?', choices: ['🍌 Banana', '🍓 Berry', '🍎 Apple'], answer: 1 },
   { q: 'Which fruit restores\nGlory\'s health?', choices: ['🍌 Banana', '🍓 Berry', '🍎 Apple'], answer: 2 },
+  // Level 3 bamboo bridge gate riddle (index 18)
+  { q: 'I creak beneath your feet,\nstretch across the void,\nand hold you above nothing.\nWhat am I?', choices: ['A rope', 'A bridge', 'A plank', 'A shadow'], answer: 1 },
 ];
 
 function hwall(row: number, c1: number, c2: number): [number, number][] {
@@ -268,7 +270,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     ],
     poisonTiles: [],
     iqGatePositions: [
-      { col: 15, row: 14, challengeIdx: 11 }, // guards correct Connector2 entry
+      { col: 15, row: 14, challengeIdx: 18 }, // guards correct Connector2 entry
     ],
     movingWallConfigs: [], hasBoss: false,
     gloryStart: { col: 1, row: 4 },
