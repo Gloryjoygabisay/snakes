@@ -716,10 +716,35 @@ class VenomArenaScene extends Phaser.Scene {
   private fallingRocks: Array<{ x: number; y: number; vy: number; size: number; alpha: number }> = [];
   private rockSpawnTimer = 0;
 
-  // Level 2 wind push
+  // Level 2 wind push (zone-aware)
   private windGustActive = 0;   // ms remaining for current gust
   private windGustDir    = 1;   // +1 = right, -1 = left
   private windGustTimer  = 0;   // ms until next gust
+  // Wind is stronger in exposed connector areas (cols 12-16, 19-23)
+  private static WIND_STRONG_X_RANGES: Array<[number, number]> = [[240, 320], [380, 460]];
+
+  // Level 2 unstable path — crumbling trail sections
+  private unstableCells: Array<{
+    col: number; row: number;
+    phase: 'stable' | 'cracking' | 'collapsed' | 'recovering';
+    timerMs: number;   // ms until next phase transition
+  }> = [];
+  private collapsedCells = new Set<string>(); // 'col,row' → temporarily blocks movement
+  // Predefined trail cells that cycle through crack → collapse → recover
+  private static UNSTABLE_CELL_DEFS: Array<[number, number]> = [
+    [5,  5], [5,  6],   // upper-left corridor section A
+    [10, 5], [10, 6],   // upper-left corridor section B
+    [13, 10],[13, 11],  // connector 1 mid-point
+    [16, 15],[16, 16],  // middle trail section A
+    [19, 15],[19, 16],  // middle trail section B
+    [21, 9], [21, 12],  // connector 2 points
+    [25, 5], [27, 5],   // upper-right corridor sections
+  ];
+
+  // Level 2 constant-chase: hunters respawn at left edge after dying/retreating
+  private hunterRespawnQueue: Array<{ timerMs: number; cfg: {
+    behavior: 'hunter'; tickMs: number; startCol: number; startRow: number; color: number;
+  }}> = [];
 
   // Level 2 edge-danger: precarious ledge tiles along trail margins
   // Phase: 0=safe, 1=crumbling (Glory on it), 2=broken (deals damage)
@@ -885,6 +910,15 @@ class VenomArenaScene extends Phaser.Scene {
     this.gloryFallMs = 0;
     this.gloryVx = 0;
     this.gloryVy = 0;
+    this.hunterRespawnQueue = [];
+    this.collapsedCells = new Set();
+    // Initialise unstable cells with staggered timers so they don't all crack at once
+    this.unstableCells = (gameLevel === 2)
+      ? VenomArenaScene.UNSTABLE_CELL_DEFS.map(([col, row], i) => ({
+          col, row, phase: 'stable' as const,
+          timerMs: 5000 + i * 1200 + Math.random() * 3000,
+        }))
+      : [];
     this.heartbeatTimerMs = 0;
     this.fallingRocks = [];
     this.rockSpawnTimer = 0;
@@ -1023,6 +1057,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   private isWallOrClosedGate(col: number, row: number): boolean {
     if (this.walls.has(`${col},${row}`)) return true;
+    if (this.collapsedCells.has(`${col},${row}`)) return true;
     for (const gate of this.iqGates) {
       if (!gate.open && gate.col === col && gate.row === row) return true;
     }
@@ -1799,21 +1834,82 @@ class VenomArenaScene extends Phaser.Scene {
         }
       }
 
-      // ── Wind gust: pushes Glory slightly sideways ─────────────────────
+      // ── Wind gust: pushes Glory — stronger in exposed connector zones ──
       this.windGustTimer = Math.max(0, this.windGustTimer - delta);
       if (this.windGustTimer === 0) {
         this.windGustDir    = Math.random() < 0.65 ? 1 : -1; // mostly rightward
         this.windGustActive = 800 + Math.random() * 600;
-        this.windGustTimer  = 5000 + Math.random() * 4000;
+        this.windGustTimer  = 4000 + Math.random() * 3500;   // slightly more frequent
       }
       if (this.windGustActive > 0) {
         this.windGustActive -= delta;
-        const drift = this.windGustDir * 0.7 * (delta / 16);
+        // Zone-aware intensity: connector areas get 2× wind force
+        const inStrongZone = VenomArenaScene.WIND_STRONG_X_RANGES.some(
+          ([x0, x1]) => this.glory.x >= x0 && this.glory.x <= x1
+        );
+        const driftStrength = inStrongZone ? 1.5 : 0.7;
+        const drift = this.windGustDir * driftStrength * (delta / 16);
         const wxNew = Math.max(12, Math.min(CANVAS_W - 12, this.glory.x + drift));
         const wxCell  = Math.floor(wxNew / CELL_SIZE);
         const wyCell  = Math.floor(this.glory.y / CELL_SIZE);
         if (!this.isWallOrClosedGate(wxCell, wyCell)) {
           this.glory.x = wxNew;
+        }
+      }
+
+      // ── Unstable path: crack → collapse → recover cycle ───────────────
+      for (const uc of this.unstableCells) {
+        uc.timerMs = Math.max(0, uc.timerMs - delta);
+        if (uc.timerMs > 0) continue;
+        const key = `${uc.col},${uc.row}`;
+        switch (uc.phase) {
+          case 'stable':
+            uc.phase   = 'cracking';
+            uc.timerMs = 1800; // crack warning duration
+            break;
+          case 'cracking':
+            uc.phase   = 'collapsed';
+            uc.timerMs = 3500; // how long the pit stays open
+            this.collapsedCells.add(key);
+            // If Glory is standing on this cell, she falls
+            {
+              const gc = this.gloryCell();
+              if (gc.x === uc.col && gc.y === uc.row && this.glory.invincibleMs <= 0) {
+                this.loseLife();
+              }
+            }
+            break;
+          case 'collapsed':
+            uc.phase   = 'recovering';
+            uc.timerMs = 1200;
+            this.collapsedCells.delete(key);
+            break;
+          case 'recovering':
+            uc.phase   = 'stable';
+            uc.timerMs = 7000 + Math.random() * 6000; // wait before cracking again
+            break;
+        }
+      }
+
+      // ── Constant chase: respawn retreating/stuck hunters behind Glory ──
+      for (const sn of this.snakes) {
+        if (sn.behavior !== 'hunter') continue;
+        // If hunter has retreated all the way back to spawn (col ≤ 1) re-energise it
+        if (sn.retreating && sn.segments[0].x <= 1) {
+          sn.retreating = false;
+          sn.stunnedMs  = 0;
+          // Teleport to left edge, same row as Glory so it chases immediately
+          const glRow = this.gloryCell().y;
+          const spawnRow = Math.abs(glRow - 5) < Math.abs(glRow - 6) ? 5 : 6;
+          sn.segments.forEach(p => { p.x = 0; p.y = spawnRow; });
+        }
+      }
+      // Tick respawn queue (for any hunters queued from other sources)
+      for (let i = this.hunterRespawnQueue.length - 1; i >= 0; i--) {
+        this.hunterRespawnQueue[i].timerMs -= delta;
+        if (this.hunterRespawnQueue[i].timerMs <= 0) {
+          this.spawnSnake(false, this.hunterRespawnQueue[i].cfg);
+          this.hunterRespawnQueue.splice(i, 1);
         }
       }
 
@@ -3722,7 +3818,41 @@ class VenomArenaScene extends Phaser.Scene {
       g.beginPath(); g.moveTo(ex + 12, ey + 4); g.lineTo(ex + 8, ey + 16); g.strokePath();
     }
 
-    // ── 12. Direction guide dots along trail centre ───────────────────
+    // ── 12. Unstable path cells — cracking / collapsed visual ────────────
+    const now = Date.now();
+    for (const uc of this.unstableCells) {
+      if (uc.phase === 'stable') continue;
+      const ux = uc.col * CELL_SIZE;
+      const uy = uc.row * CELL_SIZE;
+      if (uc.phase === 'cracking') {
+        // Flickering yellow-brown crack warning
+        const cPulse = 0.4 + 0.3 * Math.sin(now / 90);
+        g.fillStyle(0x8b5a00, cPulse * 0.7);
+        g.fillRect(ux, uy, CELL_SIZE, CELL_SIZE);
+        g.lineStyle(1, 0xffaa00, cPulse);
+        // Three crack lines radiating outward
+        g.beginPath(); g.moveTo(ux + 10, uy + 2);  g.lineTo(ux + 5,  uy + 18); g.strokePath();
+        g.beginPath(); g.moveTo(ux + 10, uy + 2);  g.lineTo(ux + 17, uy + 14); g.strokePath();
+        g.beginPath(); g.moveTo(ux + 4,  uy + 10); g.lineTo(ux + 16, uy + 7);  g.strokePath();
+      } else if (uc.phase === 'collapsed') {
+        // Dark pit — fallen section of trail
+        g.fillStyle(0x100a04, 0.92);
+        g.fillRect(ux, uy, CELL_SIZE, CELL_SIZE);
+        // Red-orange glow at the edges of the pit
+        const pitPulse = 0.22 + 0.12 * Math.sin(now / 200);
+        g.fillStyle(0xff3300, pitPulse * 0.5);
+        g.fillRect(ux, uy, CELL_SIZE, 2);
+        g.fillRect(ux, uy + CELL_SIZE - 2, CELL_SIZE, 2);
+        g.fillRect(ux, uy, 2, CELL_SIZE);
+        g.fillRect(ux + CELL_SIZE - 2, uy, 2, CELL_SIZE);
+      } else if (uc.phase === 'recovering') {
+        // Fading back — light grey dust
+        g.fillStyle(0x9e8d6a, 0.35);
+        g.fillRect(ux, uy, CELL_SIZE, CELL_SIZE);
+      }
+    }
+
+    // ── 13. Direction guide dots along trail centre ───────────────────
     const ucY  = (trailTopY + trailBotY) / 2;
     const mcY  = (midTopY   + midBotY)   / 2;
     const c1cX = (conn1LX   + conn1RX)   / 2;
