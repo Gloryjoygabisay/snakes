@@ -708,6 +708,10 @@ class VenomArenaScene extends Phaser.Scene {
   private fogScrollMs  = 0;
   private windTimerMs  = 0;
 
+  // Level 2 balance mechanic — velocity / momentum fields
+  private gloryVx = 0;
+  private gloryVy = 0;
+
   // Level 2 falling rocks
   private fallingRocks: Array<{ x: number; y: number; vy: number; size: number; alpha: number }> = [];
   private rockSpawnTimer = 0;
@@ -879,6 +883,8 @@ class VenomArenaScene extends Phaser.Scene {
     this.pistolBullets = 0;
     this.bullets = [];
     this.gloryFallMs = 0;
+    this.gloryVx = 0;
+    this.gloryVy = 0;
     this.heartbeatTimerMs = 0;
     this.fallingRocks = [];
     this.rockSpawnTimer = 0;
@@ -1417,8 +1423,75 @@ class VenomArenaScene extends Phaser.Scene {
     }
 
     // Move Glory with wall collision
-    if (this.joystickActive && this.dragDir) {
-      // Base speed capped at 1.2 px/frame; reversed for Mirror Maze
+    if (gameLevel === 2) {
+      // ── Level 2: momentum-based balance movement ──────────────────────
+      // Physics constants
+      const ACCEL    = 0.28;   // acceleration per frame unit toward input
+      const FRICTION = 0.80;   // velocity decay each frame (lower = slidier)
+      const MAX_VEL  = 2.6;    // max speed magnitude (px per 16ms frame)
+
+      const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
+      const baseSpd = Math.min(this.glory.speed, 1.2);
+      this.gloryStealthMode = this.shiftKeyDown || this.joystickDist < 39 * 0.45;
+      const stealthMult = this.gloryStealthMode ? 0.45 : 1.0;
+      const targetSpd = (this.activePowerUp?.kind === 'speed' ? baseSpd * 1.8 : baseSpd * stealthMult);
+
+      const curSpeed = Math.hypot(this.gloryVx, this.gloryVy);
+
+      if (this.joystickActive && this.dragDir) {
+        // At high speed, sideways responsiveness is reduced (harder to steer)
+        const speedRatio = Math.min(1, curSpeed / MAX_VEL);
+        // Control factor: 1.0 at rest → 0.45 at full speed (sloppy at high speed)
+        const controlFactor = 1.0 - speedRatio * 0.55;
+
+        // Decompose input into forward and sideways relative to current velocity
+        let accelX = this.dragDir.dx * rev * ACCEL * targetSpd * controlFactor;
+        let accelY = this.dragDir.dy * rev * ACCEL * targetSpd * controlFactor;
+
+        this.gloryVx += accelX;
+        this.gloryVy += accelY;
+      }
+
+      // Apply friction (slide effect when input stops or direction changes)
+      this.gloryVx *= FRICTION;
+      this.gloryVy *= FRICTION;
+
+      // Clamp to max speed
+      const newSpeed = Math.hypot(this.gloryVx, this.gloryVy);
+      if (newSpeed > MAX_VEL) {
+        this.gloryVx = (this.gloryVx / newSpeed) * MAX_VEL;
+        this.gloryVy = (this.gloryVy / newSpeed) * MAX_VEL;
+      }
+
+      // Scale velocity by delta for frame-rate independence
+      const frameFactor = delta / 16;
+
+      // Apply velocity with wall collision (X and Y separately)
+      const newX = this.glory.x + this.gloryVx * frameFactor;
+      const nxC  = Math.max(12, Math.min(CANVAS_W - 12, newX));
+      const nxCell = Math.max(0, Math.min(COLS - 1, Math.floor(nxC / CELL_SIZE)));
+      const cyCell = Math.max(0, Math.min(ROWS - 1, Math.floor(this.glory.y / CELL_SIZE)));
+      if (!this.isWallOrClosedGate(nxCell, cyCell)) {
+        this.glory.x = nxC;
+      } else {
+        this.gloryVx *= -0.2; // bounce off wall, lose most momentum
+      }
+
+      const newY = this.glory.y + this.gloryVy * frameFactor;
+      const nyC  = Math.max(12, Math.min(CANVAS_H - 12, newY));
+      const cxCell = Math.max(0, Math.min(COLS - 1, Math.floor(this.glory.x / CELL_SIZE)));
+      const nyCell = Math.max(0, Math.min(ROWS - 1, Math.floor(nyC / CELL_SIZE)));
+      if (!this.isWallOrClosedGate(cxCell, nyCell)) {
+        this.glory.y = nyC;
+      } else {
+        this.gloryVy *= -0.2;
+      }
+
+      if (!this.joystickActive) {
+        this.gloryStealthMode = this.shiftKeyDown;
+      }
+    } else if (this.joystickActive && this.dragDir) {
+      // ── All other levels: direct movement ────────────────────────────
       const rev = LEVEL_CONFIGS[gameLevel - 1].reversedControls ? -1 : 1;
       const baseSpd = Math.min(this.glory.speed, 1.2);
       // Stealth: light joystick touch (< 45% of KNOB_MAX=39) OR Shift key held
