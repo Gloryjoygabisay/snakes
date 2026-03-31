@@ -1839,7 +1839,8 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.windGustTimer === 0) {
         this.windGustDir    = Math.random() < 0.65 ? 1 : -1; // mostly rightward
         this.windGustActive = 800 + Math.random() * 600;
-        this.windGustTimer  = 4000 + Math.random() * 3500;   // slightly more frequent
+        this.windGustTimer  = 4000 + Math.random() * 3500;
+        this.cameras.main.shake(120, 0.004); // gust hit — quick jolt
       }
       if (this.windGustActive > 0) {
         this.windGustActive -= delta;
@@ -1866,11 +1867,14 @@ class VenomArenaScene extends Phaser.Scene {
           case 'stable':
             uc.phase   = 'cracking';
             uc.timerMs = 1800; // crack warning duration
+            this.playCrack();
+            this.cameras.main.shake(180, 0.004); // subtle pre-crack tremor
             break;
           case 'cracking':
             uc.phase   = 'collapsed';
             uc.timerMs = 3500; // how long the pit stays open
             this.collapsedCells.add(key);
+            this.cameras.main.shake(320, 0.009); // heavy collapse thud
             // If Glory is standing on this cell, she falls
             {
               const gc = this.gloryCell();
@@ -2441,7 +2445,29 @@ class VenomArenaScene extends Phaser.Scene {
     }
   }
 
-  // ── Wood Stick ─────────────────────────────────────────────────────────────
+  private playCrack(): void {
+    // Deep structural groan — like ground giving way
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(55, ctx.currentTime + 0.35);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.5);
+    // Add a short noise burst for the crack texture
+    const bufLen = Math.floor(ctx.sampleRate * 0.12);
+    const buf  = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+    const src2  = ctx.createBufferSource(); src2.buffer = buf;
+    const gain2 = ctx.createGain(); gain2.gain.value = 0.14;
+    src2.connect(gain2); gain2.connect(ctx.destination);
+    src2.start(); src2.stop(ctx.currentTime + 0.15);
+  }
   private useWoodStick(): void {
     // Find the nearest emerged, non-retreating snake within 8 cells
     const gc = this.gloryCell();
@@ -2618,6 +2644,64 @@ class VenomArenaScene extends Phaser.Scene {
       const wPulse = 0.05 + 0.08 * Math.abs(Math.sin(Date.now() / 140));
       this.overlayGraphics.fillStyle(0xffdd00, wPulse);
       this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+
+    // ── Level 2 emotional layer ────────────────────────────────────────
+    if (gameLevel === 2) {
+      // 1. "They're getting closer…" — red glow bleeds in from LEFT edge
+      //    when the nearest hunter is within 8 cells of Glory
+      let nearestHunterDist = Infinity;
+      for (const sn of this.snakes) {
+        if (!sn.alive || sn.behavior !== 'hunter') continue;
+        const d = Math.hypot(sn.segments[0].x - this.gloryCell().x,
+                             sn.segments[0].y - this.gloryCell().y);
+        if (d < nearestHunterDist) nearestHunterDist = d;
+      }
+      if (nearestHunterDist <= 8) {
+        const threat = 1 - nearestHunterDist / 8;          // 0..1
+        const rAlpha = threat * (0.18 + 0.08 * Math.sin(Date.now() / 160));
+        // Left-edge danger gradient (4 bands, fading right)
+        for (let b = 0; b < 5; b++) {
+          this.overlayGraphics.fillStyle(0xcc0000, rAlpha * (1 - b * 0.18));
+          this.overlayGraphics.fillRect(b * 22, 0, 22, CANVAS_H);
+        }
+        // Proximity tremor when very close (≤ 3 cells)
+        if (nearestHunterDist <= 3 && Math.random() < 0.04) {
+          this.cameras.main.shake(80, 0.003);
+        }
+      }
+
+      // 2. Speed lines — "I can't stop…" when momentum is high
+      const vel = Math.hypot(this.gloryVx, this.gloryVy);
+      if (vel > 1.4) {
+        const intensity = Math.min(1, (vel - 1.4) / 1.2);
+        const lineAlpha = intensity * 0.22;
+        this.overlayGraphics.lineStyle(1, 0xffffff, lineAlpha);
+        const numLines = Math.floor(6 + intensity * 10);
+        for (let i = 0; i < numLines; i++) {
+          const lx = Math.random() * CANVAS_W;
+          const ly = Math.random() * CANVAS_H;
+          const len = 18 + Math.random() * 28;
+          const angle = this.facingAngle + Math.PI; // lines trail behind movement
+          this.overlayGraphics.beginPath();
+          this.overlayGraphics.moveTo(lx, ly);
+          this.overlayGraphics.lineTo(lx + Math.cos(angle) * len, ly + Math.sin(angle) * len);
+          this.overlayGraphics.strokePath();
+        }
+      }
+
+      // 3. "I might fall…" — low-opacity abyss vignette (dark at bottom)
+      //    intensifies when near a cracking or collapsed cell
+      const nearCrack = this.unstableCells.some(uc => {
+        if (uc.phase !== 'cracking' && uc.phase !== 'collapsed') return false;
+        const d = Math.hypot(uc.col - this.gloryCell().x, uc.row - this.gloryCell().y);
+        return d <= 2;
+      });
+      if (nearCrack) {
+        const fPulse = 0.08 + 0.06 * Math.sin(Date.now() / 110);
+        this.overlayGraphics.fillStyle(0x000000, fPulse);
+        this.overlayGraphics.fillRect(0, CANVAS_H * 0.6, CANVAS_W, CANVAS_H * 0.4);
+      }
     }
 
     if (this.activePowerUp?.kind === 'flashlight') {
