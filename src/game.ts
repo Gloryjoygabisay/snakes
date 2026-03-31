@@ -212,15 +212,15 @@ const LEVEL_CONFIGS: LevelConfig[] = [
     gloryStart: { col: 1,  row: 5 },
     exitZone:   { col: 30, row: 5 },
     collectibles: [
-      // Upper-left trail — lures player forward fast
-      [3, 5], [6, 6], [9, 5],
+      // Upper-left trail — mixed fruits lure player forward
+      [3,  5, 'apple'],   [6,  6, 'banana'],  [9,  5, 'apple'],
       // Connector 1 — risky mid-bend prizes
-      [13, 9], [13, 13],
+      [13, 9, 'banana'],  [13, 13, 'berry'],
       // Middle trail — rewards for surviving the choke
-      [15, 15], [18, 16],
+      [15, 15, 'apple'],  [18, 16, 'banana'],
       // Connector 2 + upper-right trail — final sprint prizes
-      [21, 10], [25, 5], [28, 6],
-    ] as [number, number][],
+      [21, 10, 'berry'],  [25, 5, 'banana'],  [28, 6, 'apple'],
+    ] as [number, number, FruitKind][],
     bushes: [
       [4,  6],  // upper-left trail (early cover)
       [8,  5],  // upper-left trail (mid cover)
@@ -229,10 +229,10 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       [24, 5],  // upper-right trail (pre-exit cover)
     ],
     snakeEnemyConfigs: [
-      // 🔴 Fast Hunter — the house sentry, right on Glory's tail
-      { behavior: 'hunter' as const, tickMs: 380, startCol: 5, startRow: 5, color: 0xff2244 },
-      // 🟢 Hunter — second house snake, staggered one row back
-      { behavior: 'hunter' as const, tickMs: 430, startCol: 4, startRow: 6, color: 0x7CFF4F },
+      // 🔴 Fast Hunter — spawns behind Glory, chases hard from the left
+      { behavior: 'hunter' as const, tickMs: 380, startCol: 0, startRow: 5, color: 0xff2244 },
+      // 🟢 Hunter — second pursuer, slightly offset row so they don't stack
+      { behavior: 'hunter' as const, tickMs: 430, startCol: 0, startRow: 6, color: 0x7CFF4F },
       // 🟡 Patrol — guards the middle choke; back-and-forth sweep
       { behavior: 'patrol' as const, tickMs: 460, startCol: 16, startRow: 15, color: 0xffcc00,
         patrolA: { col: 13, row: 15 }, patrolB: { col: 20, row: 15 } },
