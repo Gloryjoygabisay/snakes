@@ -1063,7 +1063,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   private isWallOrClosedGate(col: number, row: number): boolean {
     if (this.walls.has(`${col},${row}`)) return true;
-    if (this.collapsedCells.has(`${col},${row}`)) return true;
+    // Collapsed cells are NOT walls — Glory passes through but takes damage
     for (const gate of this.iqGates) {
       if (!gate.open && gate.col === col && gate.row === row) return true;
     }
@@ -1877,35 +1877,10 @@ class VenomArenaScene extends Phaser.Scene {
             this.cameras.main.shake(180, 0.004); // subtle pre-crack tremor
             break;
           case 'cracking':
-            // Safety: only collapse if Glory has a clear exit from this column
-            // Check 4 neighbours — if at least one is walkable, safe to collapse
-            {
-              const neighbours: [number,number][] = [
-                [uc.col-1, uc.row], [uc.col+1, uc.row],
-                [uc.col, uc.row-1], [uc.col, uc.row+1],
-              ];
-              const hasEscape = neighbours.some(
-                ([nc, nr]) => !this.isWallOrClosedGate(nc, nr) &&
-                              nc >= 0 && nr >= 0 && nc < COLS && nr < ROWS
-              );
-              if (!hasEscape) {
-                // Postpone collapse — reset to stable quickly so player isn't trapped
-                uc.phase   = 'recovering';
-                uc.timerMs = 1500;
-                break;
-              }
-            }
             uc.phase   = 'collapsed';
             uc.timerMs = 3500; // how long the pit stays open
             this.collapsedCells.add(key);
             this.cameras.main.shake(320, 0.009); // heavy collapse thud
-            // If Glory is standing on this cell, she falls
-            {
-              const gc = this.gloryCell();
-              if (gc.x === uc.col && gc.y === uc.row && this.glory.invincibleMs <= 0) {
-                this.loseLife();
-              }
-            }
             break;
           case 'collapsed':
             uc.phase   = 'recovering';
@@ -1916,6 +1891,17 @@ class VenomArenaScene extends Phaser.Scene {
             uc.phase   = 'stable';
             uc.timerMs = 7000 + Math.random() * 6000; // wait before cracking again
             break;
+        }
+      }
+
+      // ── Collapsed cell damage: Glory takes a hit if she steps into a pit ─
+      if (this.glory.invincibleMs <= 0) {
+        const gc = this.gloryCell();
+        if (this.collapsedCells.has(`${gc.x},${gc.y}`)) {
+          this.loseLife();
+          // Push Glory one step back (away from the pit) so she isn't stuck in it
+          this.gloryVx = -this.gloryVx * 0.5;
+          this.gloryVy = -this.gloryVy * 0.5;
         }
       }
 
