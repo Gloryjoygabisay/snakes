@@ -39,6 +39,8 @@ const CHALLENGES: Challenge[] = [
   { q: 'I creak beneath your feet,\nstretch across the void,\nand hold you above nothing.\nWhat am I?', choices: ['A rope', 'A bridge', 'A plank', 'A shadow'], answer: 1 },
   // Level 4 cave light puzzle (index 19)
   { q: 'In complete darkness,\nwhich sense guides you\nwhen eyes are useless?', choices: ['Sight', 'Touch & Sound', 'Smell', 'Taste'], answer: 1 },
+  // Level 5 — not used for gate (boss fight), but included for completeness
+  { q: 'What is the only way\nto defeat fear?', choices: ['Run away', 'Face it', 'Hide', 'Ignore it'], answer: 1 },
 ];
 
 function hwall(row: number, c1: number, c2: number): [number, number][] {
@@ -381,18 +383,51 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       { behavior: 'sentry' as const, tickMs: 360, startCol: 28, startRow: 11, color: 0xff2244 },
     ],
   },
-  // Level 5: First Enemy — medium path, 1 slow enemy
+  // Level 5: The Venom Queen's Lair — final boss fight
   {
-    name: 'First Enemy',
-    survivalGoal: 999, snakeCount: 1, snakeTickMs: 420, glorySpeed: 2.0, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    name: "The Venom Queen's Lair",
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 300, glorySpeed: 1.8, lives: 3,
+    scoreMultiplier: 2.0, fogOfWar: false, speedRamp: false, hasBoss: true,
+    bannerText: "👑 THE VENOM QUEEN'S LAIR\nFace the source of all danger… and survive. 🐍🔥",
     walls: [
-      ...hwall(8,  3, 29), ...hwall(16, 3, 29),
+      // Outer boundary
+      ...hwall(2,  3, 28),   // top
+      ...hwall(21, 3, 28),   // bottom
+      ...vwall(3,  2, 10), ...vwall(3, 13, 21),   // left  (gap rows 11-12 = entry)
+      ...vwall(28, 2, 10), ...vwall(28, 13, 21),  // right (gap rows 11-12 = exit)
+
+      // Pillar TL
+      ...hwall(5, 6, 7), ...hwall(7, 6, 7),
+      ...vwall(6, 5, 7), ...vwall(8, 5, 7),
+      // Pillar BL
+      ...hwall(17, 6, 7), ...hwall(19, 6, 7),
+      ...vwall(6, 17, 19), ...vwall(8, 17, 19),
+      // Pillar TR
+      ...hwall(5, 24, 25), ...hwall(7, 24, 25),
+      ...vwall(24, 5, 7), ...vwall(26, 5, 7),
+      // Pillar BR
+      ...hwall(17, 24, 25), ...hwall(19, 24, 25),
+      ...vwall(24, 17, 19), ...vwall(26, 17, 19),
     ],
-    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 1, row: 12 },
-    exitZone:   { col: 30, row: 12 },
-    collectibles: [[4,12],[7,11],[10,13],[13,11],[16,13],[19,11],[22,13],[25,11],[27,12]] as [number,number][],
-    bushes: [[5,13],[12,11],[20,13],[26,11]],
+    poisonTiles: [],
+    iqGatePositions: [],
+    movingWallConfigs: [],
+    gloryStart: { col: 4,  row: 11 },
+    exitZone:   { col: 29, row: 11 },
+    collectibles: [
+      // Phase 1 fruits — spread around arena edges
+      [6,  11, 'apple'],  [10,  4, 'apple'],  [10, 19, 'apple'],
+      [15,  4, 'banana'], [15, 19, 'banana'],
+      // Venom crystals — 3 berries placed near queen's patrol center (damage the queen when collected)
+      [13, 11, 'berry'],  // Crystal 1: centre-left
+      [16,  9, 'berry'],  // Crystal 2: centre-top
+      [16, 14, 'berry'],  // Crystal 3: centre-bottom
+      // Phase 2 & 3 recovery items
+      [22,  4, 'apple'],  [22, 19, 'apple'],
+      [25, 11, 'apple'],
+    ] as [number, number, FruitKind][],
+    bushes: [],
+    snakeEnemyConfigs: [],
   },
   // Level 6: Dark Forest — fog of war, 1 enemy
   {
@@ -875,6 +910,12 @@ class VenomArenaScene extends Phaser.Scene {
     [24, 10], [26, 15], [28, 12], // Room C floor cracks
   ];
 
+  private static LEVEL5_UNSTABLE_CELL_DEFS: Array<[number, number]> = [
+    [8, 8], [12, 6], [16, 5], [20, 8], [24, 8],
+    [8, 15], [12, 17], [16, 18], [20, 15], [24, 15],
+    [10, 11], [13, 13], [19, 10], [22, 12],
+  ];
+
   // Level 2 constant-chase: hunters respawn at left edge after dying/retreating
   private hunterRespawnQueue: Array<{ timerMs: number; cfg: {
     behavior: 'hunter'; tickMs: number; startCol: number; startRow: number; color: number;
@@ -908,6 +949,13 @@ class VenomArenaScene extends Phaser.Scene {
   private caveLightRadius = 4.5;   // shrinks over time; berry restores it
   private fakeHissTimerMs = 0;     // countdown to next fake directional hiss
   private echoTimerMs     = 0;     // countdown to next echo footstep
+
+  // Level 5 — The Venom Queen's Lair
+  private bossHp            = 3;    // 3 hits before she's defeated
+  private bossPhase         = 1;    // 1, 2, or 3 — controls queen speed & chaos
+  private bossPhaseTransMs  = 0;    // flash/shake timer after phase change
+  private venomSpreadMs     = 0;    // countdown to spread new poison tile
+  private queenRoarMs       = 0;    // countdown to next roar overlay text
 
   // Heartbeat (any level, 1 life remaining)
   private heartbeatTimerMs = 0;
@@ -977,7 +1025,12 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
     if (config.hasBoss) {
-      this.spawnSnake(true);
+      // Level 5: Venom Queen starts at arena centre
+      if (gameLevel === 5) {
+        this.spawnSnake(true, { behavior: 'chaser' as const, tickMs: 300, startCol: 16, startRow: 11, color: 0x9b00ff, lurksInDark: false });
+      } else {
+        this.spawnSnake(true);
+      }
     }
 
     // Initialize walls
@@ -1061,8 +1114,10 @@ class VenomArenaScene extends Phaser.Scene {
       ? VenomArenaScene.LEVEL3_UNSTABLE_CELL_DEFS
       : gameLevel === 4
         ? VenomArenaScene.LEVEL4_UNSTABLE_CELL_DEFS
-        : VenomArenaScene.UNSTABLE_CELL_DEFS;
-    this.unstableCells = (gameLevel === 2 || gameLevel === 3 || gameLevel === 4)
+        : gameLevel === 5
+          ? VenomArenaScene.LEVEL5_UNSTABLE_CELL_DEFS
+          : VenomArenaScene.UNSTABLE_CELL_DEFS;
+    this.unstableCells = (gameLevel === 2 || gameLevel === 3 || gameLevel === 4 || gameLevel === 5)
       ? cellDefs.map(([col, row], i) => ({
           col, row, phase: 'stable' as const,
           timerMs: 5000 + i * 1200 + Math.random() * 3000,
@@ -1086,6 +1141,13 @@ class VenomArenaScene extends Phaser.Scene {
     this.caveLightRadius = 4.5;
     this.fakeHissTimerMs = 6000 + Math.random() * 8000;
     this.echoTimerMs     = 4000 + Math.random() * 5000;
+    if (gameLevel === 5) {
+      this.bossHp           = 3;
+      this.bossPhase        = 1;
+      this.bossPhaseTransMs = 0;
+      this.venomSpreadMs    = 4000;
+      this.queenRoarMs      = 5000 + Math.random() * 4000;
+    }
     this.updatePistolHUD();
 
     this.survivalMs = 0;
@@ -2227,6 +2289,73 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
+    // ── Level 5: The Venom Queen's Lair mechanics ────────────────────────────
+    if (gameLevel === 5 && !this.roundOver) {
+      // Block exit until boss defeated
+      if (this.bossHp > 0) {
+        const gc5 = this.gloryCell();
+        if (gc5.x >= 27) {
+          this.glory.x = 26 * CELL_SIZE + CELL_SIZE / 2;
+          this.overlayText.setText('👑 Defeat the\nVenom Queen first!');
+          this.overlayText.setVisible(true);
+          this.time.delayedCall(1000, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+        }
+      }
+
+      // Phase transition flash
+      if (this.bossPhaseTransMs > 0) {
+        this.bossPhaseTransMs = Math.max(0, this.bossPhaseTransMs - delta);
+      }
+
+      // Venom spread — Phase 2+ adds poison tiles dynamically near queen
+      if (this.bossPhase >= 2) {
+        this.venomSpreadMs -= delta;
+        if (this.venomSpreadMs <= 0) {
+          const spreadInterval = this.bossPhase === 2 ? 3500 : 2000;
+          this.venomSpreadMs = spreadInterval;
+          const boss = this.snakes.find(s => s.isBoss && s.alive);
+          if (boss) {
+            const bx = boss.segments[0].x;
+            const by = boss.segments[0].y;
+            const offsets: [number, number][] = [[-2,0],[2,0],[0,-2],[0,2],[-1,-1],[1,1],[-1,1],[1,-1]];
+            const [ox, oy] = offsets[Math.floor(Math.random() * offsets.length)];
+            const px = Math.max(4, Math.min(27, bx + ox));
+            const py = Math.max(3, Math.min(20, by + oy));
+            if (!this.walls.has(`${px},${py}`)) {
+              this.poisonTiles.add(`${px},${py}`);
+            }
+          }
+        }
+      }
+
+      // Phase 3 — arena instability: make floor tiles crumble
+      if (this.bossPhase >= 3) {
+        for (const uc of this.unstableCells) {
+          if (uc.phase === 'stable' && Math.random() < 0.0005 * delta) {
+            uc.phase = 'cracking';
+            uc.timerMs = 2000;
+          }
+        }
+      }
+
+      // Queen roar — occasional intimidation text
+      this.queenRoarMs -= delta;
+      if (this.queenRoarMs <= 0) {
+        this.queenRoarMs = 6000 + Math.random() * 6000;
+        const roars = [
+          '👑 "You cannot escape me…"',
+          '🐍 "This is MY domain!"',
+          '🔥 "All snakes obey ME!"',
+          '👑 "Foolish girl… HISSSS"',
+        ];
+        const roar = roars[Math.floor(Math.random() * roars.length)];
+        this.overlayText.setText(roar);
+        this.overlayText.setVisible(true);
+        this.time.delayedCall(1500, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+        this.playRoar();
+      }
+    }
+
     // Snake stun countdown
     for (const snake of this.snakes) {
       if (snake.stunnedMs > 0) {
@@ -2296,6 +2425,45 @@ class VenomArenaScene extends Phaser.Scene {
             this.overlayText.setText('🔦 Torch found!\nLight restored!');
             this.overlayText.setVisible(true);
             this.time.delayedCall(1200, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+          }
+          if (gameLevel === 5) {
+            this.bossHp = Math.max(0, this.bossHp - 1);
+            this.bossPhaseTransMs = 1200;
+            if (this.bossHp <= 0) {
+              // DEFEATED — open exit
+              this.overlayText.setText("👑 VENOM QUEEN DEFEATED!\nRUN TO THE EXIT! 🏃");
+              this.overlayText.setVisible(true);
+              this.time.delayedCall(2500, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+              // Clear exit wall cells so Glory can pass through
+              this.walls.delete('28,11');
+              this.walls.delete('28,12');
+              this.playFanfare();
+            } else {
+              const phase = 4 - this.bossHp; // 1 berry = phase 2, 2 berries = phase 3
+              this.bossPhase = phase;
+              const phaseMsg = phase === 2
+                ? "💥 PHASE 2!\nShe's getting angry… 😡"
+                : "🔥 PHASE 3 — FINAL FORM!\nCHAOS BEGINS! 😱";
+              this.overlayText.setText(phaseMsg);
+              this.overlayText.setVisible(true);
+              this.time.delayedCall(1800, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+              // Speed up the boss
+              const boss = this.snakes.find(s => s.isBoss && s.alive);
+              if (boss) {
+                boss.tickMs = phase === 2 ? 200 : 130;
+                boss.baseTick = boss.tickMs;
+              }
+              // Spawn 2 minion snakes on phase transition
+              const minionColor = phase === 2 ? 0x44ff66 : 0xff4400;
+              const minionTick  = phase === 2 ? 350 : 250;
+              const spawnPairs: [number, number][] = phase === 2
+                ? [[5, 5], [5, 18]]
+                : [[26, 5], [26, 18]];
+              for (const [sc, sr] of spawnPairs) {
+                this.spawnSnake(false, { behavior: 'chaser' as const, tickMs: minionTick, startCol: sc, startRow: sr, color: minionColor, lurksInDark: false });
+              }
+              this.playRoar();
+            }
           }
         }
 
@@ -2643,6 +2811,43 @@ class VenomArenaScene extends Phaser.Scene {
       osc.connect(g); g.connect(ctx.destination);
       osc.start(t0); osc.stop(t0 + 0.35);
     });
+  }
+
+  // ── Level 5 boss audio ───────────────────────────────────────────────────
+  private playRoar(): void {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(80, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(40, ctx.currentTime + 0.8);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.9);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.9);
+      ctx.close();
+    } catch { /* silent */ }
+  }
+
+  private playFanfare(): void {
+    try {
+      const ctx = new AudioContext();
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.12);
+        gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + i * 0.12 + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.25);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.12);
+        osc.stop(ctx.currentTime + i * 0.12 + 0.3);
+      });
+      ctx.close();
+    } catch { /* silent */ }
   }
 
   // ── Level 4 cave echo (footstep reverb) ──────────────────────────────────
@@ -4026,6 +4231,123 @@ class VenomArenaScene extends Phaser.Scene {
     g.fillTriangle(sfx + 33, sfy - 7, sfx + 42, sfy - 1, sfx + 33, sfy + 5);
   }
 
+  // ── Level 5: The Venom Queen's Lair — crimson lava boss arena ────────────
+  private drawLevel5Background(): void {
+    const g = this.bgGraphics;
+    const t = Date.now();
+
+    // 1. Dark lava/crimson cave floor
+    g.fillStyle(0x0d0000);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // 2. Open arena floor — glowing stone tiles
+    for (let row = 3; row <= 20; row++) {
+      for (let col = 4; col <= 27; col++) {
+        if (!this.walls.has(`${col},${row}`)) {
+          const heat = ((col + row) % 3 === 0) ? 0x1a0800 : 0x150600;
+          g.fillStyle(heat);
+          g.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+      }
+    }
+
+    // 3. Wall texture — dark crimson stone
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (this.walls.has(`${col},${row}`)) {
+          const shade = ((col * 5 + row * 7) % 3 === 0) ? 0x2a0505 : 0x1e0303;
+          g.fillStyle(shade);
+          g.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+          // Stone crack lines
+          g.lineStyle(1, 0x0a0000, 0.5);
+          g.beginPath();
+          g.moveTo(col * CELL_SIZE + 2, row * CELL_SIZE + 5);
+          g.lineTo(col * CELL_SIZE + 14, row * CELL_SIZE + 16);
+          g.strokePath();
+        }
+      }
+    }
+
+    // 4. Lava cracks — glowing red lines across floor
+    const lavaLines: [number, number, number, number][] = [
+      [80, 60, 160, 120], [200, 80, 320, 160], [100, 200, 240, 300],
+      [300, 180, 420, 260], [380, 100, 480, 180], [440, 220, 560, 320],
+    ];
+    const lavaGlow = 0.15 + 0.08 * Math.sin(t / 300);
+    for (const [x1, y1, x2, y2] of lavaLines) {
+      g.lineStyle(2, 0xff2200, lavaGlow);
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath();
+    }
+
+    // 5. Poison tiles — sickly green puddles (current + dynamic)
+    for (const key of this.poisonTiles) {
+      const [pc, pr] = key.split(',').map(Number);
+      const pAlpha = 0.45 + 0.15 * Math.sin(t / 400 + pc);
+      g.fillStyle(0x00cc22, pAlpha);
+      g.fillEllipse(pc * CELL_SIZE + CELL_SIZE / 2, pr * CELL_SIZE + CELL_SIZE / 2, CELL_SIZE - 2, CELL_SIZE - 4);
+    }
+
+    // 6. Phase transition flash (white/red burst when queen takes a hit)
+    if (this.bossPhaseTransMs > 0) {
+      const flashAlpha = (this.bossPhaseTransMs / 1200) * 0.4;
+      g.fillStyle(this.bossHp <= 0 ? 0xffffff : 0xff0000, flashAlpha);
+      g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+
+    // 7. Boss HP bar — top-centre of screen
+    const boss5 = this.snakes.find(s => s.isBoss && s.alive);
+    if (boss5) {
+      const hpBarX = CANVAS_W / 2 - 80, hpBarY = 8, hpBarW = 160, hpBarH = 10;
+      g.fillStyle(0x220000, 0.8);
+      g.fillRoundedRect(hpBarX - 2, hpBarY - 2, hpBarW + 4, hpBarH + 4, 4);
+      const hpFrac = Math.max(0, this.bossHp / 3);
+      const hpColor = this.bossHp === 3 ? 0x9b00ff : this.bossHp === 2 ? 0xff6600 : 0xff0000;
+      g.fillStyle(hpColor, 0.9);
+      g.fillRoundedRect(hpBarX, hpBarY, hpBarW * hpFrac, hpBarH, 3);
+      // Pulsing glow on HP bar
+      g.lineStyle(1, hpColor, 0.3 + 0.2 * Math.sin(t / 150));
+      g.strokeRoundedRect(hpBarX, hpBarY, hpBarW, hpBarH, 3);
+    }
+
+    // 8. Boss phase aura — ring around queen head
+    if (boss5 && boss5.alive) {
+      const qx = boss5.segments[0].x * CELL_SIZE + CELL_SIZE / 2;
+      const qy = boss5.segments[0].y * CELL_SIZE + CELL_SIZE / 2;
+      const auraColor = this.bossPhase === 1 ? 0x9b00ff : this.bossPhase === 2 ? 0xff6600 : 0xff0000;
+      const auraR = 18 + 6 * Math.sin(t / 200);
+      g.lineStyle(3, auraColor, 0.5 + 0.25 * Math.sin(t / 150));
+      g.strokeCircle(qx, qy, auraR);
+      // Crown icon glow above her head
+      g.fillStyle(0xffd700, 0.8);
+      g.fillTriangle(qx - 8, qy - 22, qx, qy - 30, qx + 8, qy - 22);
+      g.fillTriangle(qx - 5, qy - 32, qx, qy - 30, qx - 8, qy - 22);
+      g.fillTriangle(qx + 5, qy - 32, qx, qy - 30, qx + 8, qy - 22);
+    }
+
+    // 9. Unstable floor tiles (Phase 3)
+    for (const uc of this.unstableCells) {
+      if (uc.phase === 'stable') continue;
+      const ux = uc.col * CELL_SIZE, uy = uc.row * CELL_SIZE;
+      if (uc.phase === 'cracking') {
+        g.lineStyle(1, 0xff4400, 0.7); g.beginPath();
+        g.moveTo(ux + 3, uy + 4); g.lineTo(ux + 12, uy + 15); g.strokePath();
+        g.beginPath(); g.moveTo(ux + 15, uy + 3); g.lineTo(ux + 7, uy + 16); g.strokePath();
+      } else if (uc.phase === 'collapsed') {
+        g.fillStyle(0x110000, 0.95); g.fillRect(ux, uy, CELL_SIZE, CELL_SIZE);
+        g.fillStyle(0xff2200, 0.4); g.fillCircle(ux + CELL_SIZE / 2, uy + CELL_SIZE / 2, 7);
+      }
+    }
+
+    // 10. Ambient sparks / embers floating up from ground
+    const sparkCount = this.bossPhase === 1 ? 6 : this.bossPhase === 2 ? 12 : 20;
+    for (let i = 0; i < sparkCount; i++) {
+      const sx = (Math.sin(t / 600 + i * 1.3) * 0.5 + 0.5) * CANVAS_W;
+      const sy = CANVAS_H - ((t / 800 + i * 40) % CANVAS_H);
+      g.fillStyle(0xff4400, 0.15 + 0.1 * Math.sin(t / 200 + i));
+      g.fillCircle(sx, sy, 2);
+    }
+  }
+
   // ── Level 3: Bamboo Bridge Maze — dark abyss with bridge planks ──────────
   private drawLevel4Background(): void {
     const g = this.bgGraphics;
@@ -4558,6 +4880,8 @@ class VenomArenaScene extends Phaser.Scene {
     if (gameLevel === 3) { this.drawLevel3Background(); return; }
     // Level 4: "The Hollow Cave" — dark cave with fading light
     if (gameLevel === 4) { this.drawLevel4Background(); return; }
+    // Level 5: "The Venom Queen's Lair" — crimson boss arena
+    if (gameLevel === 5) { this.drawLevel5Background(); return; }
 
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);

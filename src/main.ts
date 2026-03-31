@@ -79,7 +79,7 @@ const MODES: Record<GameMode, ModeConfig> = {
   explorer: {
     icon: '🌿', title: 'Explorer Mode', tagline: 'Learn & Relax · No pressure',
     badge: 'Easy', badgeClass: 'badge-easy',
-    mainLevels: [1, 2, 3, 4],
+    mainLevels: [1, 2, 3, 4, 5],
     bonusLevels: [11, 12],
     unlockAfterLevel: null,
     bonusUnlockAfterLevel: 3,
