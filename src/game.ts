@@ -686,12 +686,9 @@ class VenomArenaScene extends Phaser.Scene {
   private bushChallengeAnswered = false;  // prevents re-triggering while inside same bush
   private hidingSearchMs = 0;            // penalty countdown after a failed hide answer (ms remaining)
   private readonly HIDING_DURATION_MS = 4500;
-  private challengeType: 'iqgate' | 'hide' | 'fruitpuzzle' | null = null;
-  private pendingHideChallenge: Challenge | null = null;
-  private fruitPuzzleChallenge: Challenge | null = null;
+  private challengeType: 'iqgate' | 'hide' | null = null;
   private exitPuzzleSolved = false;
   private snakePenaltyMs = 0;
-  private fruitPuzzleCooldownMs = 0;
   private usePerSnakeTick = false;
   private facingAngle = 0;
   private exitPulseTimer = 0;
@@ -700,7 +697,6 @@ class VenomArenaScene extends Phaser.Scene {
   private gateOpenAnimMs = 0;       // opening animation timer (counts up)
   private applesCollected = 0;          // how many apples Glory has eaten in Level 1
   private exitGateOpenAnimMs = -1;      // -1 = closed; ≥0 = opening animation timer
-  private hideAttemptCount = 0;     // wrong-answer streak on current hide riddle (resets at 3)
 
   // Pistol power-up
   private pistolPickups: Array<{ col: number; row: number; taken: boolean }> = [];
@@ -838,19 +834,12 @@ class VenomArenaScene extends Phaser.Scene {
     this.gateOpenAnimMs = 0;
     this.applesCollected = 0;
     this.exitGateOpenAnimMs = -1;
-    this.hideAttemptCount = 0;
     this.exitPulseTimer = 0;
     this.exitPuzzleSolved = false;
     this.snakePenaltyMs = 0;
-    this.fruitPuzzleCooldownMs = 0;
-    this.fruitPuzzleChallenge = null;
 
-    // House layout: add exit blocker walls (col 25, rows 9–11) removed on puzzle solve
-    if (config.houseLayout) {
-      this.walls.add('25,9');
-      this.walls.add('25,10');
-      this.walls.add('25,11');
-    }
+    // House exit is always open — no puzzle lock
+    this.exitPuzzleSolved = true;
 
     // Pistol pickups — 2 guns hidden on the Level 1 path
     this.pistolPickups = (gameLevel === 1 && !config.houseLayout)
@@ -1354,8 +1343,6 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.challengeTimerMs >= this.CHALLENGE_DURATION_MS) {
         if (this.challengeType === 'hide') {
           this.dismissHideChallenge(false);
-        } else if (this.challengeType === 'fruitpuzzle') {
-          this.dismissFruitPuzzle(false);
         } else {
           this.dismissChallenge(false);
         }
@@ -1495,10 +1482,11 @@ class VenomArenaScene extends Phaser.Scene {
     if (this.gateOpenAnimMs < 800) this.gateOpenAnimMs += delta;
     if (this.exitGateOpenAnimMs >= 0 && this.exitGateOpenAnimMs < 800) this.exitGateOpenAnimMs += delta;
 
-    // Trigger hide challenge when entering a bush (levels with bushes, but not house layout)
-    if (this.hiddenInBush && !this.challengeActive && !this.bushChallengeAnswered
+    // Bush hiding — always succeeds, no trivia challenge
+    if (this.hiddenInBush && !this.bushChallengeAnswered
         && this.bushCells.size > 0 && gameLevel === 1 && !LEVEL_CONFIGS[0].houseLayout) {
-      this.triggerHideChallenge();
+      this.hidingSuccess = true;
+      this.bushChallengeAnswered = true;
     }
 
     this.gloryTrail.unshift({ x: this.glory.x, y: this.glory.y });
@@ -1547,26 +1535,7 @@ class VenomArenaScene extends Phaser.Scene {
       }
     }
 
-    // Fruit puzzle trigger — house level: locked exit door at col 25 requires solving a puzzle
-    // Require at least 4 fruits collected before the puzzle is offered (fruit gate)
-    if (!this.challengeActive && LEVEL_CONFIGS[gameLevel - 1].houseLayout && !this.exitPuzzleSolved) {
-      if (this.fruitPuzzleCooldownMs > 0) {
-        this.fruitPuzzleCooldownMs = Math.max(0, this.fruitPuzzleCooldownMs - delta);
-      } else {
-        const gcFP = this.gloryCell();
-        if (Math.abs(gcFP.x - 25) + Math.abs(gcFP.y - 10) <= 1) {
-          if (this.applesCollected >= 4) {
-            this.triggerFruitPuzzle();
-          } else {
-            // Not enough fruits — show hint and add a short cooldown so it doesn't spam
-            this.overlayText.setText(`🍎 Collect ${4 - this.applesCollected} more fruit${4 - this.applesCollected !== 1 ? 's' : ''} first!`);
-            this.overlayText.setVisible(true);
-            this.time.delayedCall(1800, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
-            this.fruitPuzzleCooldownMs = 2500;
-          }
-        }
-      }
-    }
+    // (Fruit puzzle and IQ gate locks removed — exit is always open)
 
     // House key pickup — glowing key in SE room bypasses the puzzle entirely
     if (this.houseKey && !this.houseKey.taken && !this.exitPuzzleSolved) {
@@ -1859,72 +1828,6 @@ class VenomArenaScene extends Phaser.Scene {
     overlay?.classList.remove('hidden');
   }
 
-  private triggerHideChallenge(): void {
-    const riddle = CHALLENGES[10 + Math.floor(Math.random() * 5)];
-    this.pendingHideChallenge = riddle;
-    this.challengeActive = true;
-    this.bushChallengeAnswered = true;   // mark so we don't re-trigger this visit
-    this.challengeType = 'hide';
-    this.challengeTimerMs = 0;
-    this.snakeTickTimer?.remove();
-
-    const overlay = document.getElementById('challenge-overlay');
-    const badge = overlay?.querySelector('.challenge-badge');
-    const hint = overlay?.querySelector('.challenge-hint');
-    const qEl = document.getElementById('challenge-question');
-    const choicesEl = document.getElementById('challenge-choices');
-    const bar = document.getElementById('challenge-timer-bar');
-
-    if (badge) badge.textContent = '🏕️ Shelter Riddle';
-    if (hint) hint.textContent = `Answer correctly to stay hidden — get it wrong and the snakes find you!`;
-    if (qEl) qEl.textContent = riddle.q;
-    if (bar) bar.style.width = '100%';
-
-    if (choicesEl) {
-      choicesEl.innerHTML = '';
-      riddle.choices.forEach((choice, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'challenge-choice-btn';
-        btn.textContent = choice;
-        btn.addEventListener('click', () => { this.answerHideChallenge(idx); });
-        choicesEl.appendChild(btn);
-      });
-    }
-
-    overlay?.classList.remove('hidden');
-  }
-
-  private answerHideChallenge(idx: number): void {
-    if (!this.challengeActive || !this.pendingHideChallenge) return;
-    const correct = idx === this.pendingHideChallenge.answer;
-    if (correct) {
-      this.hideAttemptCount = 0;
-      this.dismissHideChallenge(true);
-      return;
-    }
-
-    // Wrong answer — allow up to 3 tries on the same question
-    this.hideAttemptCount++;
-    if (this.hideAttemptCount >= 3) {
-      // Used all 3 tries → dismiss with penalty; next tree entry gets a fresh question
-      this.hideAttemptCount = 0;
-      this.bushChallengeAnswered = false;  // allow re-trigger with new riddle
-      this.dismissHideChallenge(false);
-    } else {
-      // Flash feedback and keep the same question open
-      const remaining = 3 - this.hideAttemptCount;
-      const hint = document.querySelector<HTMLElement>('#challenge-overlay .challenge-hint');
-      if (hint) hint.textContent = `❌ Wrong! ${remaining} attempt${remaining !== 1 ? 's' : ''} left…`;
-
-      // Briefly flash all choice buttons red
-      document.querySelectorAll<HTMLElement>('.challenge-choice-btn').forEach(btn => {
-        btn.style.background = '#cc2222';
-        btn.style.color = '#fff';
-        setTimeout(() => { btn.style.background = ''; btn.style.color = ''; }, 450);
-      });
-    }
-  }
-
   private dismissHideChallenge(correct: boolean): void {
     if (correct) {
       this.hidingSuccess = true;
@@ -1945,7 +1848,6 @@ class VenomArenaScene extends Phaser.Scene {
     }
 
     this.challengeActive = false;
-    this.pendingHideChallenge = null;
     this.challengeTimerMs = 0;
     this.challengeType = null;
 
@@ -1987,81 +1889,6 @@ class VenomArenaScene extends Phaser.Scene {
     this.overlayText.setText('✨ EXIT OPEN!\n🐍 Snakes are coming — RUN! 🏃‍♀️');
     this.overlayText.setVisible(true);
     this.time.delayedCall(2500, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
-  }
-
-  private triggerFruitPuzzle(): void {
-    this.challengeActive = true;
-    this.challengeTimerMs = 0;
-    this.challengeType = 'fruitpuzzle';
-    this.snakeTickTimer?.remove();
-
-    const q = CHALLENGES[15 + Math.floor(Math.random() * 3)];
-    this.fruitPuzzleChallenge = q;
-
-    const overlay = document.getElementById('challenge-overlay');
-    const badge = overlay?.querySelector<HTMLElement>('.challenge-badge');
-    const hint = overlay?.querySelector<HTMLElement>('.challenge-hint');
-    const stakes = overlay?.querySelector<HTMLElement>('.challenge-stakes');
-    const qEl = document.getElementById('challenge-question');
-    const choicesEl = document.getElementById('challenge-choices');
-    const bar = document.getElementById('challenge-timer-bar');
-
-    if (badge) badge.textContent = '🔐 FRUIT CODE LOCK';
-    if (hint) hint.textContent = 'Solve the fruit puzzle to unlock the exit!';
-    if (stakes) stakes.textContent = '✅ Correct: Exit unlocks! ❌ Wrong / Timeout: Snakes go BERSERK for 5 seconds! 😱';
-    if (qEl) qEl.textContent = q.q;
-    if (bar) bar.style.width = '100%';
-
-    if (choicesEl) {
-      choicesEl.innerHTML = '';
-      q.choices.forEach((choice, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'challenge-choice-btn';
-        btn.textContent = choice;
-        btn.addEventListener('click', () => { this.answerFruitPuzzle(idx); });
-        choicesEl.appendChild(btn);
-      });
-    }
-
-    overlay?.classList.remove('hidden');
-  }
-
-  private answerFruitPuzzle(idx: number): void {
-    if (!this.challengeActive || !this.fruitPuzzleChallenge) return;
-    const correct = idx === this.fruitPuzzleChallenge.answer;
-    this.dismissFruitPuzzle(correct);
-  }
-
-  private dismissFruitPuzzle(correct: boolean): void {
-    if (correct) {
-      this.unlockExit();  // removes walls, triggers escape rush, starts animation
-    } else {
-      // BERSERK MODE: all snakes move at ~2× speed for 5 seconds
-      this.snakePenaltyMs = 5000;
-      for (const sn of this.snakes) {
-        if (!sn.alive) continue;
-        sn.tickMs = Math.max(80, Math.floor(sn.tickMs * 0.5));
-      }
-      this.glory.invincibleMs = Math.max(this.glory.invincibleMs, 800);
-      this.fruitPuzzleCooldownMs = 6000;  // re-trigger cooldown so player can flee
-    }
-
-    this.challengeActive = false;
-    this.fruitPuzzleChallenge = null;
-    this.challengeTimerMs = 0;
-    this.challengeType = null;
-
-    // Restore stakes text for any future IQ gate challenges
-    const stakes = document.querySelector<HTMLElement>('#challenge-overlay .challenge-stakes');
-    if (stakes) stakes.textContent = '✅ Correct: You\'re revived! \u00a0 ❌ Wrong / Timeout: Game Over 💀';
-
-    document.getElementById('challenge-overlay')?.classList.add('hidden');
-
-    if (!this.roundOver) {
-      const config = LEVEL_CONFIGS[gameLevel - 1];
-      const tickMs = Math.max(80, Math.floor(config.snakeTickMs / this.speedRampFactor));
-      this.startSnakeTimer(tickMs);
-    }
   }
 
   private answerChallenge(idx: number): void {
