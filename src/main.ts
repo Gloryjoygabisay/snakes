@@ -296,3 +296,9 @@ aboutPanel?.addEventListener('click', (e) => { if (e.target === aboutPanel) clos
 const bgCanvas = document.getElementById('bg-canvas') as HTMLCanvasElement | null;
 if (bgCanvas) bgAnim = startBgAnimation(bgCanvas);
 setVersionText();
+
+// Prevent browser zoom gestures (trackpad pinch, Ctrl/Cmd+scroll) so the
+// game always fits the window without needing Cmd+0 to reset zoom.
+window.addEventListener('wheel', (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }, { passive: false });
+window.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+window.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
