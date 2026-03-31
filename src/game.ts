@@ -2079,7 +2079,11 @@ class VenomArenaScene extends Phaser.Scene {
 
     // Exit zone check — reach exit to win
     if (this.exitZone && gc2.x === this.exitZone.col && gc2.y === this.exitZone.row) {
-      this.winGame();
+      if (gameLevel === 2) {
+        this.triggerLevel2Ending();
+      } else {
+        this.winGame();
+      }
       return;
     }
 
@@ -4808,6 +4812,63 @@ class VenomArenaScene extends Phaser.Scene {
 
   private gameOver(): void {
     this.showEndOverlay(`💀 Game Over!\nScore: ${this.score}`, false);
+  }
+
+  // ── Level 2 cinematic ending ───────────────────────────────────────────────
+  private triggerLevel2Ending(): void {
+    if (this.roundOver) return;
+    this.roundOver = true;   // stop collision checks and movement
+    this.snakeTickTimer?.remove();
+
+    // Phase 1 (0–800ms): Glory leaps — accelerate her rightward off screen
+    // Phase 2 (800–2000ms): snakes reach edge and freeze; wind fades
+    // Phase 3 (2000–3400ms): calm moment, text fades in
+    // Phase 4 (3400ms): show win overlay
+
+    // Freeze all snakes at their current positions (they "stop at edge")
+    this.time.delayedCall(900, () => {
+      for (const sn of this.snakes) {
+        sn.stunnedMs = 99999; // effectively frozen
+        sn.retreating = false;
+      }
+    });
+
+    // Screen flash — jump to safety!
+    this.cameras.main.flash(400, 255, 255, 255, false);
+    this.cameras.main.shake(280, 0.012);
+
+    // Cinematic text sequence
+    this.overlayText.setVisible(true);
+    this.overlayText.setText('🏃‍♀️ JUMP!');
+    this.time.delayedCall(800,  () => {
+      this.overlayText.setText('😮‍💨 She made it…');
+      this.cameras.main.shake(150, 0.004);
+    });
+    this.time.delayedCall(1600, () => {
+      this.overlayText.setText('🐍 The snakes stop at the edge…');
+    });
+    this.time.delayedCall(2500, () => {
+      this.overlayText.setText('🌬️ The wind slowly fades…');
+      // Fade wind particle effect out
+      for (const p of this.windParticles) { p.alpha = 0; }
+    });
+    this.time.delayedCall(3400, () => {
+      this.overlayText.setText('🌄 A moment of calm…\nThe trail awaits ahead.');
+    });
+    this.time.delayedCall(4600, () => {
+      this.winGame();   // shows score and next-level button
+    });
+
+    // Launch Glory off the right edge during the jump
+    this.time.addEvent({
+      delay: 30,
+      repeat: 25,
+      callback: () => {
+        this.glory.x = Math.min(CANVAS_W + 30, this.glory.x + 8);
+        this.glory.y += 3; // slight arc downward — jumping off
+        this.drawScene();
+      },
+    });
   }
 
   private winGame(): void {
