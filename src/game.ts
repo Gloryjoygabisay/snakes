@@ -203,7 +203,7 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       ...hwall(17, 12, 22),  // bottom wall (col 22 closed; connector 2 entry at cols 20–22 above)
       // ── Connector 2: cols 20–22, rows 6–16 (going UP) ───────────────────
       ...vwall(19,  6, 14),  // left wall (stops above middle trail so rows 15-16 stay open)
-      ...vwall(23,  5, 17),  // right wall
+      ...vwall(23,  7, 17),  // right wall (starts at row 7 — doesn't block upper-right corridor rows 5-6)
       // ── Upper-right trail: rows 5–6, cols 22–30 ─────────────────────────
       ...hwall(4, 20, 30),   // top wall (also seals top of connector 2 entry)
       ...hwall(7, 22, 30),   // bottom wall
@@ -551,6 +551,8 @@ interface Point { x: number; y: number; }
 interface SnakeEnemy {
   id: number;
   segments: Point[];
+  prevSegments: Point[];     // positions before last step — used for smooth interpolation
+  lerpT: number;             // 0→1 between last step and next; drives render interpolation
   alive: boolean;
   stunnedMs: number;
   color: number;
@@ -1038,7 +1040,8 @@ class VenomArenaScene extends Phaser.Scene {
     const useBushSpawn = this.usePerSnakeTick && !!cfg;
     const isSleeper = cfg?.behavior === 'sleeper';
     this.snakes.push({
-      id, segments: segs, alive: true, stunnedMs: 0, color, isBoss,
+      id, segments: segs, prevSegments: segs.map(s => ({ ...s })), lerpT: 1,
+      alive: true, stunnedMs: 0, color, isBoss,
       behavior: cfg?.behavior ?? 'chaser',
       tickMs: cfg?.tickMs ?? 600,
       baseTick: cfg?.tickMs ?? 600,
@@ -1197,6 +1200,10 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   private moveSnakeStep(snake: SnakeEnemy, gc: Point): void {
+    // Save current positions for smooth interpolation
+    snake.prevSegments = snake.segments.map(s => ({ ...s }));
+    snake.lerpT = 0;
+
     const head = snake.segments[0];
 
     // ── Retreat: snake heads back to its spawn bush ──────────────────────
@@ -1661,6 +1668,16 @@ class VenomArenaScene extends Phaser.Scene {
           snake.tickAccumMs -= snake.tickMs;
           this.moveSnakeStep(snake, gc3);
         }
+        // Advance lerp progress toward 1 (next step)
+        snake.lerpT = Math.min(1, snake.tickAccumMs / snake.tickMs);
+      }
+    }
+
+    // Advance lerp on global-timer snakes (non-usePerSnakeTick)
+    if (!this.usePerSnakeTick) {
+      for (const snake of this.snakes) {
+        if (!snake.alive) continue;
+        snake.lerpT = Math.min(1, snake.lerpT + delta / snake.tickMs);
       }
     }
 
@@ -4331,14 +4348,17 @@ class VenomArenaScene extends Phaser.Scene {
 
       // ── Body segments: draw filled rectangles between adjacent segments ──
       // This bridges the 20px cell gap so the body looks connected, not dotted
+      const t = snake.lerpT;   // 0 = just moved, 1 = fully arrived
       for (let i = n - 1; i >= 1; i--) {
-        const segA = segs[i];       // current (tail side)
-        const segB = segs[i - 1];   // next toward head
+        const segA  = segs[i];       // current (tail side)
+        const segB  = segs[i - 1];   // next toward head
+        const prevA = snake.prevSegments[i]     ?? segA;
+        const prevB = snake.prevSegments[i - 1] ?? segB;
 
-        const ax = segA.x * CELL_SIZE + CELL_SIZE / 2;
-        const ay = segA.y * CELL_SIZE + CELL_SIZE / 2;
-        const bx = segB.x * CELL_SIZE + CELL_SIZE / 2;
-        const by = segB.y * CELL_SIZE + CELL_SIZE / 2;
+        const ax = (prevA.x + (segA.x - prevA.x) * t) * CELL_SIZE + CELL_SIZE / 2;
+        const ay = (prevA.y + (segA.y - prevA.y) * t) * CELL_SIZE + CELL_SIZE / 2;
+        const bx = (prevB.x + (segB.x - prevB.x) * t) * CELL_SIZE + CELL_SIZE / 2;
+        const by = (prevB.y + (segB.y - prevB.y) * t) * CELL_SIZE + CELL_SIZE / 2;
 
         // Taper: last 25% of body shrinks toward a point tail
         const tailFrac = i / (n - 1);
