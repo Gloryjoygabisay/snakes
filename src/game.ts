@@ -708,6 +708,18 @@ class VenomArenaScene extends Phaser.Scene {
   private fogScrollMs  = 0;
   private windTimerMs  = 0;
 
+  // Level 2 falling rocks
+  private fallingRocks: Array<{ x: number; y: number; vy: number; size: number; alpha: number }> = [];
+  private rockSpawnTimer = 0;
+
+  // Level 2 wind push
+  private windGustActive = 0;   // ms remaining for current gust
+  private windGustDir    = 1;   // +1 = right, -1 = left
+  private windGustTimer  = 0;   // ms until next gust
+
+  // Heartbeat (any level, 1 life remaining)
+  private heartbeatTimerMs = 0;
+
   // Bite / fall animation
   private gloryFallMs = 0;    // counts down from 1200 → 0 after a snake bite
 
@@ -848,6 +860,12 @@ class VenomArenaScene extends Phaser.Scene {
     this.pistolBullets = 0;
     this.bullets = [];
     this.gloryFallMs = 0;
+    this.heartbeatTimerMs = 0;
+    this.fallingRocks = [];
+    this.rockSpawnTimer = 0;
+    this.windGustActive = 0;
+    this.windGustTimer  = 4000;
+    this.windGustDir    = 1;
     this.updatePistolHUD();
 
     this.survivalMs = 0;
@@ -1595,9 +1613,9 @@ class VenomArenaScene extends Phaser.Scene {
       this.jumpScareFlashMs = Math.max(0, this.jumpScareFlashMs - delta);
     }
 
-    // ── Audio ticks (house layout only) ───────────────────────────────────
-    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout) {
-      // Hiss: play when nearest active snake is within 5 cells, every 2.2 seconds
+    // ── Audio ticks (house layout + Level 2) ─────────────────────────────
+    if (LEVEL_CONFIGS[gameLevel - 1].houseLayout || gameLevel === 2) {
+      // Hiss: play when nearest active snake is within 5 cells
       this.snakeHissTimerMs = Math.max(0, this.snakeHissTimerMs - delta);
       if (this.snakeHissTimerMs === 0) {
         const gcA = this.gloryCell();
@@ -1616,11 +1634,20 @@ class VenomArenaScene extends Phaser.Scene {
         }
       }
 
-      // Footsteps: soft click while sneaking + moving
+      // Footsteps: soft click while moving (dirt sound on Level 2)
       this.footstepTimerMs = Math.max(0, this.footstepTimerMs - delta);
-      if (this.footstepTimerMs === 0 && this.gloryStealthMode && this.joystickActive) {
+      if (this.footstepTimerMs === 0 && this.joystickActive) {
         this.playFootstep();
-        this.footstepTimerMs = 380;
+        this.footstepTimerMs = gameLevel === 2 ? 320 : 380;
+      }
+    }
+
+    // ── Heartbeat — any level at 1 life remaining ─────────────────────────
+    if (this.glory.lives === 1) {
+      this.heartbeatTimerMs = Math.max(0, this.heartbeatTimerMs - delta);
+      if (this.heartbeatTimerMs === 0) {
+        this.playHeartbeat();
+        this.heartbeatTimerMs = 860;
       }
     }
 
@@ -1639,6 +1666,55 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.windTimerMs === 0) {
         this.playWind();
         this.windTimerMs = 3500 + Math.random() * 2500;
+      }
+
+      // ── Falling rocks: spawn in cliff-face zones, fall into abyss ────
+      this.rockSpawnTimer = Math.max(0, this.rockSpawnTimer - delta);
+      if (this.rockSpawnTimer === 0) {
+        // Spawn in one of the three cliff zones (not on the trail)
+        const zone = Math.floor(Math.random() * 3);
+        let rx: number;
+        if      (zone === 0) rx = 10  + Math.random() * 200;   // left cliff
+        else if (zone === 1) rx = 330 + Math.random() * 40;    // centre gap
+        else                 rx = 470 + Math.random() * 160;   // right cliff
+        this.fallingRocks.push({
+          x: rx, y: 145 + Math.random() * 100,
+          vy: 1.2 + Math.random() * 1.4,
+          size: 3 + Math.random() * 5,
+          alpha: 0.55 + Math.random() * 0.35,
+        });
+        this.playRockFall();
+        this.rockSpawnTimer = 3500 + Math.random() * 4500;
+      }
+      // Animate rocks
+      for (const r of this.fallingRocks) {
+        r.y  += r.vy * delta * 0.06;
+        r.vy += 0.015 * delta * 0.06;  // gravity
+        r.alpha -= 0.0004 * delta;
+      }
+      // Remove rocks that have fallen off screen
+      for (let i = this.fallingRocks.length - 1; i >= 0; i--) {
+        if (this.fallingRocks[i].y > CANVAS_H + 10 || this.fallingRocks[i].alpha <= 0) {
+          this.fallingRocks.splice(i, 1);
+        }
+      }
+
+      // ── Wind gust: pushes Glory slightly sideways ─────────────────────
+      this.windGustTimer = Math.max(0, this.windGustTimer - delta);
+      if (this.windGustTimer === 0) {
+        this.windGustDir    = Math.random() < 0.65 ? 1 : -1; // mostly rightward
+        this.windGustActive = 800 + Math.random() * 600;
+        this.windGustTimer  = 5000 + Math.random() * 4000;
+      }
+      if (this.windGustActive > 0) {
+        this.windGustActive -= delta;
+        const drift = this.windGustDir * 0.7 * (delta / 16);
+        const wxNew = Math.max(12, Math.min(CANVAS_W - 12, this.glory.x + drift));
+        const wxCell  = Math.floor(wxNew / CELL_SIZE);
+        const wyCell  = Math.floor(this.glory.y / CELL_SIZE);
+        if (!this.isWallOrClosedGate(wxCell, wyCell)) {
+          this.glory.x = wxNew;
+        }
       }
     }
 
@@ -2072,6 +2148,49 @@ class VenomArenaScene extends Phaser.Scene {
     src.start(); src.stop(ctx.currentTime + dur);
   }
 
+  private playHeartbeat(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    // Lub-DUB: two sine thumps (60 Hz body, 48 Hz resonance)
+    const playThump = (delay: number, freq: number, vol: number) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+      gain.gain.linearRampToValueAtTime(vol,  ctx.currentTime + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + delay + 0.22);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.25);
+    };
+    playThump(0.00, 60, 0.28); // lub
+    playThump(0.08, 48, 0.18); // (overtone)
+    playThump(0.28, 60, 0.38); // DUB (louder)
+    playThump(0.32, 48, 0.22);
+  }
+
+  private playRockFall(): void {
+    const ctx = this.getAudioCtx();
+    if (!ctx) return;
+    // Two quick noise bursts with descending frequency — scraping rock
+    for (let b = 0; b < 2; b++) {
+      const dur    = 0.18 + b * 0.09;
+      const bufLen = Math.floor(ctx.sampleRate * dur);
+      const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+      const data   = buf.getChannelData(0);
+      for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+      const src  = ctx.createBufferSource(); src.buffer = buf;
+      const hp   = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 900 - b * 300;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.11 - b * 0.03, ctx.currentTime + b * 0.14);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + b * 0.14 + dur);
+      src.connect(hp); hp.connect(gain); gain.connect(ctx.destination);
+      src.start(ctx.currentTime + b * 0.14);
+      src.stop (ctx.currentTime + b * 0.14 + dur);
+    }
+  }
+
   // ── Wood Stick ─────────────────────────────────────────────────────────────
   private useWoodStick(): void {
     // Find the nearest emerged, non-retreating snake within 8 cells
@@ -2218,6 +2337,16 @@ class VenomArenaScene extends Phaser.Scene {
       const bPulse = 0.08 + 0.07 * Math.sin(Date.now() / 120);
       this.overlayGraphics.fillStyle(0xff0000, bPulse);
       this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    }
+
+    // Heartbeat vignette — pulsing deep red border when 1 life left
+    if (this.glory.lives === 1 && !this.roundOver) {
+      const hbPhase = Math.sin(Date.now() / 430);
+      const hbAlpha = hbPhase > 0 ? hbPhase * 0.22 : 0;
+      if (hbAlpha > 0) {
+        this.overlayGraphics.fillStyle(0xcc0000, hbAlpha);
+        this.overlayGraphics.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      }
     }
 
     if (this.activePowerUp?.kind === 'flashlight') {
@@ -3396,7 +3525,15 @@ class VenomArenaScene extends Phaser.Scene {
       g.fillEllipse(p.x, p.y, p.size * 2.8, p.size);
     }
 
-    // ── 10. Direction guide dots along trail centre ───────────────────
+    // ── 10. Falling rocks — break off cliff into abyss ────────────────
+    for (const r of this.fallingRocks) {
+      g.fillStyle(0x6b5c45, r.alpha * 0.8);
+      g.fillEllipse(r.x, r.y, r.size * 1.6, r.size);
+      g.fillStyle(0x998870, r.alpha * 0.45);
+      g.fillEllipse(r.x - r.size * 0.3, r.y - r.size * 0.2, r.size * 0.8, r.size * 0.5);
+    }
+
+    // ── 11. Direction guide dots along trail centre ───────────────────
     const ucY  = (trailTopY + trailBotY) / 2;
     const mcY  = (midTopY   + midBotY)   / 2;
     const c1cX = (conn1LX   + conn1RX)   / 2;
