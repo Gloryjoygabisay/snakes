@@ -37,6 +37,8 @@ const CHALLENGES: Challenge[] = [
   { q: 'Which fruit restores\nGlory\'s health?', choices: ['🍌 Banana', '🍓 Berry', '🍎 Apple'], answer: 2 },
   // Level 3 bamboo bridge gate riddle (index 18)
   { q: 'I creak beneath your feet,\nstretch across the void,\nand hold you above nothing.\nWhat am I?', choices: ['A rope', 'A bridge', 'A plank', 'A shadow'], answer: 1 },
+  // Level 4 cave light puzzle (index 19)
+  { q: 'In complete darkness,\nwhich sense guides you\nwhen eyes are useless?', choices: ['Sight', 'Touch & Sound', 'Smell', 'Taste'], answer: 1 },
 ];
 
 function hwall(row: number, c1: number, c2: number): [number, number][] {
@@ -63,6 +65,7 @@ interface SnakeEnemyConfig {
   // patrol waypoints (only used when behavior === 'patrol')
   patrolA?: { col: number; row: number };
   patrolB?: { col: number; row: number };
+  lurksInDark?: boolean;  // if true, snake is only aggressive when caveLightRadius < 2.5
 }
 
 interface LevelConfig {
@@ -305,24 +308,78 @@ const LEVEL_CONFIGS: LevelConfig[] = [
       { behavior: 'sleeper' as const, tickMs: 460, startCol: 20, startRow: 19, color: 0xff2244 },
     ],
   },
-  // Level 4: Split Paths — two parallel routes, dead ends, choice
+  // Level 4: The Hollow Cave — dark underground cave; fading light, shadow snakes, sound-based gameplay
   {
-    name: 'Split Paths',
-    survivalGoal: 999, snakeCount: 0, snakeTickMs: 460, glorySpeed: 2.0, lives: 3, scoreMultiplier: 1, fogOfWar: false,
+    name: 'The Hollow Cave',
+    survivalGoal: 999, snakeCount: 0, snakeTickMs: 480, glorySpeed: 1.5, lives: 3,
+    scoreMultiplier: 1.3, fogOfWar: true, speedRamp: false,
+    bannerText: '🕳️ THE HOLLOW CAVE\nThe light is fading… something moves in the dark… 😨',
     walls: [
-      // Upper path walls
-      ...hwall(3,  3, 29), ...hwall(8,  3, 13), ...hwall(8, 17, 29),
-      // Lower path walls
-      ...hwall(21, 3, 29), ...hwall(16, 3, 13), ...hwall(16, 17, 29),
-      // Middle divider (partial)
-      ...vwall(13, 8, 16), ...vwall(17, 8, 16),
-      // Dead ends
-      ...vwall(8, 3, 7), ...vwall(8, 17, 21),
+      // Room A (entry chamber): rows 8–14, cols 1–10
+      ...hwall(7,  1,  4), ...hwall(7,  7, 10),   // top (gap cols 5-6 = upper connector)
+      ...hwall(15, 1, 10),                          // bottom
+      ...vwall(10, 7, 10), ...vwall(10, 13, 15),   // right (gap rows 11-12 = middle tunnel)
+
+      // Upper connector (UP): cols 5–6, rows 3–8
+      ...vwall(4, 3, 8),   // left wall
+      ...vwall(7, 3, 8),   // right wall
+
+      // Upper tunnel (dead end): rows 3–4, cols 4–20
+      ...hwall(2,  4, 20),                          // top
+      ...hwall(5,  4,  4), ...hwall(5,  7, 20),    // bottom (gap cols 5-6 = connector bottom)
+
+      // Room B (upper dead end): rows 2–6, cols 20–26
+      ...hwall(1, 20, 26),                          // top
+      ...hwall(7, 20, 26),                          // bottom
+      ...vwall(26, 1, 7),                           // right (dead-end cap)
+
+      // Middle tunnel (correct path): rows 11–12, cols 10–22
+      ...hwall(10, 10, 22),                         // top
+      ...hwall(13, 10, 22),                         // bottom
+
+      // Room C (central cave): rows 8–17, cols 22–29
+      ...hwall(7,  22, 29),                         // top
+      ...hwall(18, 22, 29),                         // bottom
+      ...vwall(22,  7, 10), ...vwall(22, 13, 18),   // left (gap rows 11-12 = middle tunnel entry)
+      ...vwall(29,  7, 10), ...vwall(29, 13, 18),   // right (gap rows 11-12 = exit tunnel)
+
+      // Exit tunnel: rows 11–12, cols 29–30
+      ...hwall(10, 29, 30),                         // top
+      ...hwall(13, 29, 30),                         // bottom
     ],
-    poisonTiles: [], iqGatePositions: [], movingWallConfigs: [], hasBoss: false, speedRamp: false,
-    gloryStart: { col: 1, row: 12 },
-    exitZone:   { col: 30, row: 12 },
-    collectibles: [[4,6],[7,6],[10,6],[4,18],[7,18],[10,18],[18,6],[22,6],[26,6],[18,18],[22,18],[26,18],[28,12]] as [number,number][],
+    poisonTiles: [],
+    iqGatePositions: [
+      { col: 29, row: 11, challengeIdx: 19 }, // guards exit tunnel — light puzzle gate
+    ],
+    movingWallConfigs: [], hasBoss: false,
+    gloryStart: { col: 1,  row: 11 },
+    exitZone:   { col: 30, row: 11 },
+    collectibles: [
+      // Room A — start items, guide player
+      [3, 11, 'apple'], [5, 9, 'banana'],
+      // Upper connector / tunnel — tempting but wrong direction
+      [5, 6, 'apple'], [10, 3, 'berry'],   // torch berry in dead end — restores light
+      [15, 3, 'apple'], [22, 4, 'banana'],
+      // Middle tunnel — reward for correct path
+      [13, 11, 'apple'], [17, 12, 'banana'],
+      // Room C — torches + snakes
+      [24, 9, 'berry'],   // torch berry — restore light before dark zone
+      [26, 14, 'apple'],  [28, 10, 'banana'],
+      // Near exit
+      [29, 12, 'berry'],  // final torch near exit gate
+    ] as [number, number, FruitKind][],
+    bushes: [],
+    snakeEnemyConfigs: [
+      // Shadow snake — lurks in Room B dead end, active only in darkness
+      { behavior: 'chaser' as const, tickMs: 440, startCol: 23, startRow: 3,  color: 0x220033, lurksInDark: true },
+      // Shadow snake — lurks in Room C bottom, emerges in darkness
+      { behavior: 'chaser' as const, tickMs: 420, startCol: 25, startRow: 16, color: 0x110022, lurksInDark: true },
+      // Regular patrol — guards Room C centre
+      { behavior: 'patrol' as const, tickMs: 500, startCol: 25, startRow: 12, color: 0x7CFF4F,
+        patrolA: { col: 23, row: 9 }, patrolB: { col: 28, row: 16 } },
+      // Sentry — guards exit tunnel
+      { behavior: 'sentry' as const, tickMs: 360, startCol: 28, startRow: 11, color: 0xff2244 },
+    ],
   },
   // Level 5: First Enemy — medium path, 1 slow enemy
   {
@@ -612,6 +669,7 @@ interface SnakeEnemy {
   emerged: boolean;          // false = hiding in spawn bush, waiting for Glory
   retreating: boolean;       // true = heading back to spawn bush
   awake: boolean;            // false = sleeping (sleeper behavior only); wakes on proximity
+  lurksInDark: boolean;   // shadow snake — retreats in light, hunts in darkness
   spawnCol: number;          // bush spawn position
   spawnRow: number;
   baseTick: number;          // original tick speed used for progressive scaling
@@ -811,6 +869,12 @@ class VenomArenaScene extends Phaser.Scene {
     [16, 19], [22, 20], [26, 19],
   ];
 
+  private static LEVEL4_UNSTABLE_CELL_DEFS: Array<[number, number]> = [
+    [4, 11], [7, 12],   // Room A floor cracks
+    [12, 11], [17, 12], // Middle tunnel cracks
+    [24, 10], [26, 15], [28, 12], // Room C floor cracks
+  ];
+
   // Level 2 constant-chase: hunters respawn at left edge after dying/retreating
   private hunterRespawnQueue: Array<{ timerMs: number; cfg: {
     behavior: 'hunter'; tickMs: number; startCol: number; startRow: number; color: number;
@@ -839,6 +903,11 @@ class VenomArenaScene extends Phaser.Scene {
   private bridgeCreakTimerMs = 0;  // countdown until next creak sound
   private pathGlowMs = 0;          // ms remaining for berry path-reveal glow
   private level3StillMs = 0;       // ms Glory hasn't moved — triggers creak
+
+  // Level 4 — The Hollow Cave
+  private caveLightRadius = 4.5;   // shrinks over time; berry restores it
+  private fakeHissTimerMs = 0;     // countdown to next fake directional hiss
+  private echoTimerMs     = 0;     // countdown to next echo footstep
 
   // Heartbeat (any level, 1 life remaining)
   private heartbeatTimerMs = 0;
@@ -990,8 +1059,10 @@ class VenomArenaScene extends Phaser.Scene {
     // Initialise unstable cells with staggered timers so they don't all crack at once
     const cellDefs = gameLevel === 3
       ? VenomArenaScene.LEVEL3_UNSTABLE_CELL_DEFS
-      : VenomArenaScene.UNSTABLE_CELL_DEFS;
-    this.unstableCells = (gameLevel === 2 || gameLevel === 3)
+      : gameLevel === 4
+        ? VenomArenaScene.LEVEL4_UNSTABLE_CELL_DEFS
+        : VenomArenaScene.UNSTABLE_CELL_DEFS;
+    this.unstableCells = (gameLevel === 2 || gameLevel === 3 || gameLevel === 4)
       ? cellDefs.map(([col, row], i) => ({
           col, row, phase: 'stable' as const,
           timerMs: 5000 + i * 1200 + Math.random() * 3000,
@@ -1012,6 +1083,9 @@ class VenomArenaScene extends Phaser.Scene {
     this.bridgeCreakTimerMs = 3000 + Math.random() * 2000;
     this.pathGlowMs = 0;
     this.level3StillMs = 0;
+    this.caveLightRadius = 4.5;
+    this.fakeHissTimerMs = 6000 + Math.random() * 8000;
+    this.echoTimerMs     = 4000 + Math.random() * 5000;
     this.updatePistolHUD();
 
     this.survivalMs = 0;
@@ -1127,6 +1201,7 @@ class VenomArenaScene extends Phaser.Scene {
       patrolA: cfg?.patrolA ? { x: cfg.patrolA.col, y: cfg.patrolA.row } : { x: hx, y: hy },
       patrolB: cfg?.patrolB ? { x: cfg.patrolB.col, y: cfg.patrolB.row } : { x: hx, y: hy },
       patrolGoal: 'B',
+      lurksInDark: cfg?.lurksInDark ?? false,
     });
   }
 
@@ -2032,7 +2107,7 @@ class VenomArenaScene extends Phaser.Scene {
     }
 
     // ── Unstable path + collapsed cell damage (shared by L2 & L3) ─────────────
-    if ((gameLevel === 2 || gameLevel === 3) && !this.roundOver) {
+    if ((gameLevel === 2 || gameLevel === 3 || gameLevel === 4) && !this.roundOver) {
       // Crack → collapse → recover cycle
       for (const uc of this.unstableCells) {
         uc.timerMs = Math.max(0, uc.timerMs - delta);
@@ -2098,6 +2173,60 @@ class VenomArenaScene extends Phaser.Scene {
       if (this.pathGlowMs > 0) this.pathGlowMs -= delta;
     }
 
+    // ── Level 4: The Hollow Cave mechanics ───────────────────────────────────
+    if (gameLevel === 4 && !this.roundOver) {
+      // Fade the light over time — drains fully in ~22 seconds without torches
+      this.caveLightRadius = Math.max(0.5, this.caveLightRadius - delta * 0.00018);
+
+      // Shadow snakes: when light >= 2.5, shadow snakes freeze/retreat; < 2.5 they hunt
+      const darkMode = this.caveLightRadius < 2.5;
+      for (const sn of this.snakes) {
+        if (!sn.lurksInDark) continue;
+        if (!darkMode && sn.stunnedMs <= 0) {
+          // Suppress movement — set very long stun so they don't step
+          sn.stunnedMs = Math.max(sn.stunnedMs, 200);
+        }
+      }
+
+      // Directional hiss indicator
+      const gc4 = this.gloryCell();
+      let nearestHissDx = 0;
+      let nearestHissDist = 999;
+      for (const sn of this.snakes) {
+        if (!sn.alive || sn.stunnedMs > 0) continue;
+        const dist = Math.hypot(sn.segments[0].x - gc4.x, sn.segments[0].y - gc4.y);
+        if (dist < nearestHissDist) { nearestHissDist = dist; nearestHissDx = sn.segments[0].x - gc4.x; }
+      }
+      if (nearestHissDist < 7) {
+        const dirText = nearestHissDx < -1 ? '← HISS' : nearestHissDx > 1 ? 'HISS →' : 'HISS AHEAD';
+        if (!this.roundOver) {
+          if (Math.random() < 0.02) {  // flicker occasionally
+            this.overlayText.setText(dirText);
+            this.overlayText.setVisible(true);
+            this.time.delayedCall(600, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+          }
+        }
+      }
+
+      // Fake hiss — random direction, misleads player
+      this.fakeHissTimerMs -= delta;
+      if (this.fakeHissTimerMs <= 0) {
+        this.fakeHissTimerMs = 7000 + Math.random() * 10000;
+        const fakeDir = Math.random() < 0.5 ? '← psst…' : 'psst… →';
+        this.overlayText.setText(fakeDir);
+        this.overlayText.setVisible(true);
+        this.time.delayedCall(500, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+        this.playHiss(0.12);
+      }
+
+      // Echo footsteps
+      this.echoTimerMs -= delta;
+      if (this.echoTimerMs <= 0) {
+        this.echoTimerMs = 4000 + Math.random() * 6000;
+        this.playEcho();
+      }
+    }
+
     // Snake stun countdown
     for (const snake of this.snakes) {
       if (snake.stunnedMs > 0) {
@@ -2153,6 +2282,7 @@ class VenomArenaScene extends Phaser.Scene {
         if (c.kind === 'apple') {
           // 🍎 Apple → restore 1 life (up to configured max)
           this.glory.lives = Math.min(config.lives, this.glory.lives + 1);
+          if (gameLevel === 4) { this.caveLightRadius = Math.min(4.5, this.caveLightRadius + 0.4); }
         } else if (c.kind === 'banana') {
           // 🍌 Banana → 3-second speed boost
           this.activePowerUp = { kind: 'speed', msRemaining: 3000 };
@@ -2160,6 +2290,13 @@ class VenomArenaScene extends Phaser.Scene {
           // 🍓 Berry → 4-second invisibility (snakes lose track of Glory)
           this.berryInvisibleMs = 4000;
           if (gameLevel === 3) { this.pathGlowMs = 3000; }
+          if (gameLevel === 4) {
+            // Berry = torch: restore light
+            this.caveLightRadius = Math.min(4.5, this.caveLightRadius + 2.0);
+            this.overlayText.setText('🔦 Torch found!\nLight restored!');
+            this.overlayText.setVisible(true);
+            this.time.delayedCall(1200, () => { if (!this.roundOver) this.overlayText.setVisible(false); });
+          }
         }
 
         // Level 1 (house): track fruit count + progressively speed up snakes
@@ -2506,6 +2643,23 @@ class VenomArenaScene extends Phaser.Scene {
       osc.connect(g); g.connect(ctx.destination);
       osc.start(t0); osc.stop(t0 + 0.35);
     });
+  }
+
+  // ── Level 4 cave echo (footstep reverb) ──────────────────────────────────
+  private playEcho(): void {
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.6);
+      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.7);
+      ctx.close();
+    } catch { /* silent */ }
   }
 
   // ── Level 3 bridge creak (sawtooth wobble) ────────────────────────────────
@@ -3873,6 +4027,97 @@ class VenomArenaScene extends Phaser.Scene {
   }
 
   // ── Level 3: Bamboo Bridge Maze — dark abyss with bridge planks ──────────
+  private drawLevel4Background(): void {
+    const g = this.bgGraphics;
+    const t = Date.now();
+
+    // 1. Solid rock background — very dark brown-grey
+    g.fillStyle(0x0a0806);
+    g.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // 2. Rock texture — irregular grey-brown patches (cave walls)
+    const rockColors = [0x1a1410, 0x221a14, 0x2a2018, 0x181210];
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (this.walls.has(`${col},${row}`)) {
+          const ri = (col * 7 + row * 13) % rockColors.length;
+          g.fillStyle(rockColors[ri]);
+          g.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+          // Rock cracks
+          g.lineStyle(1, 0x0d0a08, 0.6);
+          g.beginPath();
+          g.moveTo(col * CELL_SIZE + 3, row * CELL_SIZE + 4);
+          g.lineTo(col * CELL_SIZE + 11, row * CELL_SIZE + 15);
+          g.strokePath();
+          g.beginPath();
+          g.moveTo(col * CELL_SIZE + 14, row * CELL_SIZE + 2);
+          g.lineTo(col * CELL_SIZE + 8, row * CELL_SIZE + 18);
+          g.strokePath();
+        }
+      }
+    }
+
+    // 3. Cave floor — open path cells get a slightly warm dark earth tone
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (!this.walls.has(`${col},${row}`)) {
+          const shade = ((col + row) % 2 === 0) ? 0x1c1408 : 0x181206;
+          g.fillStyle(shade);
+          g.fillRect(col * CELL_SIZE, row * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        }
+      }
+    }
+
+    // 4. Dripping water effect — stalactite drips from ceiling cells
+    const drips = [[4, 5], [9, 3], [16, 4], [23, 9], [27, 8]];
+    for (const [dc, dr] of drips) {
+      const dropPhase = (t / 1200 + dc * 0.4) % 1.0;
+      const dropY = dr * CELL_SIZE + dropPhase * CELL_SIZE * 2;
+      g.fillStyle(0x1a3a5c, 0.7);
+      g.fillEllipse(dc * CELL_SIZE + CELL_SIZE / 2, dropY, 3, 5);
+    }
+
+    // 5. Glowing moss — faint green on some wall edges
+    const mossCells: [number, number][] = [[8, 8], [22, 10], [25, 17], [10, 14]];
+    const mossAlpha = 0.12 + 0.06 * Math.sin(t / 800);
+    for (const [mc, mr] of mossCells) {
+      g.fillStyle(0x1a5c10, mossAlpha);
+      g.fillCircle(mc * CELL_SIZE + CELL_SIZE / 2, mr * CELL_SIZE + CELL_SIZE / 2, 14);
+    }
+
+    // 6. Light bar HUD — shows remaining cave light as a small flame icon + bar
+    const lightFrac = Math.max(0, this.caveLightRadius / 4.5);
+    const barX = 8, barY = CANVAS_H - 22, barW = 80, barH = 8;
+    g.fillStyle(0x111111, 0.7);
+    g.fillRoundedRect(barX - 2, barY - 2, barW + 4 + 18, barH + 4, 4);
+    const barColor = lightFrac > 0.5 ? 0xffcc44 : lightFrac > 0.25 ? 0xff8800 : 0xff2200;
+    g.fillStyle(barColor, 0.9);
+    g.fillRoundedRect(barX, barY, barW * lightFrac, barH, 3);
+    // Flame icon glow
+    g.fillStyle(0xffaa00, 0.85);
+    g.fillCircle(barX + barW + 10, barY + barH / 2, 5 + 2 * Math.sin(t / 200));
+
+    // 7. Pulsing ambient glow around Glory's position (warm torch light)
+    const gx = this.glory.x;
+    const gy = this.glory.y;
+    const torchPulse = 0.08 + 0.03 * Math.sin(t / 180);
+    g.fillStyle(0x8b5e00, torchPulse);
+    g.fillCircle(gx, gy, this.caveLightRadius * CELL_SIZE * 1.2);
+
+    // 8. Unstable/collapsed cells (reuse Level 2/3 system)
+    for (const uc of this.unstableCells) {
+      if (uc.phase === 'stable') continue;
+      const ux = uc.col * CELL_SIZE, uy = uc.row * CELL_SIZE;
+      if (uc.phase === 'cracking') {
+        g.lineStyle(1, 0xff4400, 0.6); g.beginPath();
+        g.moveTo(ux + 4, uy + 3); g.lineTo(ux + 10, uy + 14); g.strokePath();
+      } else if (uc.phase === 'collapsed') {
+        g.fillStyle(0x000000, 0.92); g.fillRect(ux, uy, CELL_SIZE, CELL_SIZE);
+        g.fillStyle(0xff2200, 0.3); g.fillCircle(ux + CELL_SIZE / 2, uy + CELL_SIZE / 2, 6);
+      }
+    }
+  }
+
   private drawLevel3Background(): void {
     const g  = this.bgGraphics;
     const CS = CELL_SIZE;
@@ -4311,6 +4556,8 @@ class VenomArenaScene extends Phaser.Scene {
     if (gameLevel === 2) { this.drawLevel2Background(); return; }
     // Level 3: "Bamboo Bridge Maze" — dark abyss, bamboo bridges, fog
     if (gameLevel === 3) { this.drawLevel3Background(); return; }
+    // Level 4: "The Hollow Cave" — dark cave with fading light
+    if (gameLevel === 4) { this.drawLevel4Background(); return; }
 
     // ── Blue sky (top portion) ────────────────────────────────────────
     this.bgGraphics.fillStyle(0x3a7fcf);
@@ -4622,7 +4869,7 @@ class VenomArenaScene extends Phaser.Scene {
 
   private drawFogOfWar(): void {
     const gc = this.gloryCell();
-    const FOG_RADIUS = 4;
+    const FOG_RADIUS = gameLevel === 4 ? Math.max(0.5, this.caveLightRadius) : 4;
     this.overlayGraphics.fillStyle(0x000011, 0.88);
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
